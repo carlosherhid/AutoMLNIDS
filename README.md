@@ -1,6 +1,6 @@
 # Quantization-Aware Training of AutoML-Optimized NIDS Models
 
-Code, trained models and result tables accompanying the paper *Quantization-Aware Training of AutoML-Optimized Deep
+Code and firmware accompanying the paper *Quantization-Aware Training of AutoML-Optimized Deep
 Learning Models for Edge Network Intrusion Detection* (anonymized for review).
 
 The pipeline takes the neural network that AutoGluon selects for binary intrusion detection on
