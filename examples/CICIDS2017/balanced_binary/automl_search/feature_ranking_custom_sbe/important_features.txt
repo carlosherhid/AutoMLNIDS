@@ -1,0 +1,8 @@
+ID
+Destination Port
+Total Fwd Packets
+Total Backward Packets
+PSH Flag Count
+ACK Flag Count
+Average Packet Size
+act_data_pkt_fwd

@@ -1,0 +1,38 @@
+# Software stack of the experiments of the paper: Python 3.11, AutoGluon 1.6.2, PyTorch 2.4.1, scikit-learn 1.4.2.
+# Direct dependencies are pinned to the versions of the cluster environment that produced the results (taken from its
+# `pip freeze`, Linux x86_64 with CUDA 12 PyTorch wheels); transitive dependencies are left to pip.
+# The CICIDS2017 AutoGluon search was run earlier on another machine (AutoGluon 1.1.1, Python 3.10); that predictor
+# is loaded unchanged under this stack (see utils/common.py). The scripts read undocumented AutoGluon internals
+# (predictor._trainer...), so keep AutoGluon on this version and, after changing it, run the smoke test of
+# cluster/README.md.
+
+# AutoML + model training
+autogluon.tabular[common,features]==1.6.2
+torch==2.4.1
+# Hyperparameter search (automl_model_search.py): without ray, AutoGluon falls back to a custom HPO path that crashed
+# every trial; searcher='bayes' needs hyperopt, and ray tune reads its results back through pyarrow.
+ray==2.6.3
+hyperopt==0.3.0
+pyarrow==24.0.0
+# ray imports pkg_resources, which recent setuptools releases no longer ship
+setuptools<70
+
+# Data handling
+pandas==2.3.3       # AutoGluon 1.6 uses the `future.no_silent_downcasting` option, added in pandas 2.2
+numpy==1.26.4       # scikit-learn 1.4 and ray 2.6 predate numpy 2
+scikit-learn==1.4.2
+xgboost==3.2.0      # classical ML baseline, scripts/baselines_classical_ml.py
+joblib==1.6.0       # saving classical ML baselines
+
+# CLI / progress / parallel utils
+click==8.5.0
+tqdm==4.70.1
+multiprocess==0.70.19
+
+# Plotting
+matplotlib==3.11.2
+seaborn==0.13.2
+torchviz==0.0.3
+
+# On-device evaluation (serial port of the M5Stack): run_serial_eval.py, device_bench/run_device_eval.py
+pyserial
