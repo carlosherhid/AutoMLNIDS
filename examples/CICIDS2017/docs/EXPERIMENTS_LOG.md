@@ -30,8 +30,8 @@ python scripts/automl_model_search.py search --directory ./datasets/CICIDS2017/b
 
 Detailed results: `datasets/CICIDS2017/balanced_binary/automl_search/models/NeuralNetTorch`
 
-`--epochs`, `--patience` and `--attempts` are the script defaults. The saved predictor confirms the search budget it
-used (28 trials of up to 1000 epochs, patience 20; `scripts/inspect_automl_budget.py`). `--cpus` and `--time-limit` are the
+`--epochs`, `--patience` and `--attempts` are the script defaults. The search that produced the saved predictor trained
+28 trials of up to 1000 epochs with patience 20. `--cpus` and `--time-limit` are the
 values of the original command notes, which were written before the run. This search was run earlier on a different
 machine (AutoGluon 1.1.1, Python 3.10); the experiments below load that predictor unchanged under the stack pinned in
 [`requirements.txt`](../../../requirements.txt).

@@ -153,18 +153,6 @@ def create(
     attack_type_categories = None
     attack_type_code_col = None
     if keep_attack_type:
-        # Snapshot the original (pre-binarization) fine-grained label as an integer
-        # code column, *before* any binarization/numeric-coercion touches `Label`.
-        # Held OUTSIDE df (not as a df column) until after Min-Max normalization,
-        # re-attached (index-aligned) right before balancing - see below. It must
-        # NOT sit inside df across that stretch: `Transforming columns to numeric`
-        # is a no-op on it (already numeric), but `Min-Max normalization` is not -
-        # it would rescale these integer category codes into floats in [0, 1] and
-        # silently corrupt them (this crashed IndexError the first time round: the
-        # "codes" used to index into attack_type_categories were no longer ints).
-        # Row-count-changing steps (dropna) are fine to let it sit out for, since
-        # pandas' index-aligned assignment on re-attach naturally drops whatever
-        # rows dropna removed.
         logger.info('Recording original per-row attack type (--keep-attack-type) for later per-class evaluation')
         codes, attack_type_categories = pd.factorize(df[type_column].astype(str))
         attack_type_code_col = pd.Series(codes, index=df.index, name='_attack_type_code')
@@ -203,9 +191,7 @@ def create(
     logger.info(f'Shape after Min-Max normalization: {df.shape}')
 
     if keep_attack_type:
-        # Re-attach now (index-aligned - see the long comment above for why it was
-        # held out), so it rides along as a normal column through balancing/
-        # splitting like everything else from here on.
+
         df['_attack_type_code'] = attack_type_code_col
 
     if is_balanced:
@@ -223,9 +209,6 @@ def create(
         logger.error('DataFrame is empty after preprocessing steps.')
         raise ValueError('DataFrame is empty after preprocessing steps.')
 
-    # Feature generation should only ever see genuine input features - pull the
-    # attack-type bookkeeping column out first and re-attach it (index-aligned)
-    # afterwards.
     attack_type_code_col = df.pop('_attack_type_code') if keep_attack_type else None
 
     a = AutoMLPipelineFeatureGenerator()

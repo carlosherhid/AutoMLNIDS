@@ -7,13 +7,13 @@ fake-quantization during training), using a handful of calibration batches to
 estimate activation ranges.
 
 Usage:
-    python scripts/post_training_quantization.py --predictor_path ./balanced_binary/automl_search \
-        --data_dir ./balanced_binary --output_dir ./balanced_binary/compressed_models \
+    python scripts/post_training_quantization.py --predictor_path <predictor_dir> \
+        --data_dir <data_dir> --output_dir <output_dir> \
         --experiment_number 6 --epochs 100
     # Or, to skip retraining and quantize an already-trained FP32 checkpoint:
-    python scripts/post_training_quantization.py --predictor_path ./balanced_binary/automl_search \
-        --data_dir ./balanced_binary --output_dir ./balanced_binary/compressed_models \
-        --experiment_number 6 --normal_model_path ./balanced_binary/compressed_models/normal_pytorch_model_exp6.pth
+    python scripts/post_training_quantization.py --predictor_path <predictor_dir> \
+        --data_dir <data_dir> --output_dir <output_dir> \
+        --experiment_number 6 --normal_model_path <normal_checkpoint>
 """
 import argparse
 import os

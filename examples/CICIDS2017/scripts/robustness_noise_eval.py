@@ -5,9 +5,9 @@ measures how accuracy degrades as increasing Gaussian noise is added to the (alr
 min-max-normalized, in [0,1]) input features, comparing the FP32 and QAT models.
 
 Usage:
-    python scripts/robustness_noise_eval.py --predictor_path ./balanced_binary/automl_search \
-        --data_dir ./balanced_binary --normal_model_path ./balanced_binary/compressed_models/normal_pytorch_model_exp6.pth \
-        --qat_model_path ./balanced_binary/compressed_models/qat_pytorch_model_exp6.pth \
+    python scripts/robustness_noise_eval.py --predictor_path <predictor_dir> \
+        --data_dir <data_dir> --normal_model_path <normal_checkpoint> \
+        --qat_model_path <qat_checkpoint> \
         --scale_close_to_zero   # exp6/exp7 were trained with near-zero scaling; exp1-3 were not
 """
 import argparse

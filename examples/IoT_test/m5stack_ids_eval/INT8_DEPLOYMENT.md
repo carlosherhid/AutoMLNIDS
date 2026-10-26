@@ -34,8 +34,10 @@ The integer emulation and PyTorch disagree on 3 of 166,967 rows.
 ```
 python run_serial_eval.py --port <PORT> --input_csv data/test_device_scaled_100.csv  --output_csv preds_m5_exp6_int8_100.csv
 python run_serial_eval.py --port <PORT> --input_csv data/test_device_scaled_1000.csv --output_csv preds_m5_exp6_int8_1000.csv
-python metrics_from_preds.py --preds preds_m5_exp6_int8_1000.csv
 ```
+
+The full test set, with accuracy, recall, FPR and the latency distribution, is evaluated with the scripts of
+`device_bench/` (see its README).
 
 The `test_device_scaled_*` files are the same samples used for the FP32 firmware (features already rescaled on the
 host, label in the last column), so both models see identical inputs.

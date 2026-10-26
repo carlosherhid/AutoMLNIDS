@@ -11,8 +11,7 @@ making QAT *slower* than FP32 despite being smaller - --latency_batch_sizes lets
 that overhead amortize over a bigger int8 GEMM to see whether/where it crosses over.
 
 Usage:
-    python scripts/build_tradeoff_table.py --predictor_path ./balanced_binary/automl_search \
-        --data_dir ./balanced_binary --logs_dir ./balanced_binary/compressed_models
+    python scripts/build_tradeoff_table.py --predictor_path <predictor_dir> --data_dir <data_dir> --logs_dir <logs_dir>
 """
 import argparse
 import glob

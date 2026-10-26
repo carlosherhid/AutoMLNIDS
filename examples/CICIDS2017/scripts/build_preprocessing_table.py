@@ -4,11 +4,8 @@ QAT protocol (CICIDS2017, 5 seeds): accuracy of the FP32 and QAT models, and rec
 F1-score of the QAT model, as mean +/- std over seeds, plus Welch t-tests of the QAT accuracy
 and FPR of the proposed rescaling against each alternative.
 
-Inputs (paper_results/CICIDS2017): multiseed_exp{3,6,50,51,52}_results.csv, and
-detailed_metrics.csv for the runs (Exp. 3, 4) whose logs predate the recall/FPR/F1 logging.
-
 Usage:
-    python scripts/build_preprocessing_table.py --results_dir ./paper_results/CICIDS2017
+    python scripts/build_preprocessing_table.py --results_dir <results_dir>
 """
 import argparse
 import os

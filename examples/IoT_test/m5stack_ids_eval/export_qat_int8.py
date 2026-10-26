@@ -16,9 +16,9 @@ is compared with PyTorch's output; the header is then parsed back and a scalar r
 of the firmware loop is run on a few rows to check the exported layout (row-major weights).
 
 Usage:
-    python export_qat_int8.py --qat_model qat_pytorch_model_exp100600.pth \
+    python export_qat_int8.py --qat_model <qat_checkpoint> \
         --output_header arduino_m5_ids_int8/exp6_qat_int8_model.h --model_name exp6_qat_int8 \
-        --check_csv data/test_device_scaled_1000.csv
+        --check_csv <test_device_scaled.csv>
 The check CSV has 61 features and the label (last column), without header, as sent to the device.
 """
 import argparse

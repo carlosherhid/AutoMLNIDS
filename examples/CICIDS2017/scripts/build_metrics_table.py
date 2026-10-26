@@ -1,17 +1,8 @@
 """
 Build the detection-metric tables of the paper (recall, FPR, F1 of the FP32 and QAT
-models, mean +/- std over seeds) from the CSVs written by evaluate_checkpoint_metrics.py,
-plus recall/FPR for the classical baselines and the precision that the same recall/FPR
-would give at other attack prevalences.
-
-Why FPR and recall: both are conditional on the true class, so they do not depend on the
-50/50 balance of the test sets (precision does). For the classical baselines, whose
-confusion matrices were not stored, FPR is derived from accuracy and recall, which is exact
-for a balanced test set (FPR = 1 - 2*accuracy + recall) and off by < 0.01 percentage points
-for the stratified splits used here.
-
+models, mean +/- std over seeds) from the CSVs written by evaluate_checkpoint_metrics.py
 Usage:
-    python scripts/build_metrics_table.py --results_dir ./paper_results
+    python scripts/build_metrics_table.py --results_dir <results_dir>
 Expects <results_dir>/<dataset>/detailed_metrics.csv and baselines_classical_ml_results.csv.
 """
 import argparse

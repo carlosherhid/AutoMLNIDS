@@ -5,8 +5,8 @@ experiments the paper reports (internal --experiment_number 1, 2, 3, 6, 7 - see
 docs/EXPERIMENTS_LOG.md).
 
 Usage:
-    python scripts/run_multiseed.py --predictor_path ./balanced_binary/automl_search \
-        --data_dir ./balanced_binary --output_dir ./balanced_binary/compressed_models \
+    python scripts/run_multiseed.py --predictor_path <predictor_dir> \
+        --data_dir <data_dir> --output_dir <output_dir> \
         --experiment_number_base 6 --seeds 0 1 2 3 4 \
         --extra_args "--normal --qat --disable_early_stopping --scale_close_to_zero"
 """

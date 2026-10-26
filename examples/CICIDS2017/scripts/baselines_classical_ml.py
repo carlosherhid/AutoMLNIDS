@@ -4,7 +4,7 @@ on the same train/test split used for the AutoML/QAT pipeline, for a fair
 size/accuracy/latency comparison table.
 
 Usage:
-    python scripts/baselines_classical_ml.py --data_dir ./balanced_binary --output_dir ./balanced_binary/compressed_models
+    python scripts/baselines_classical_ml.py --data_dir <data_dir> --output_dir <output_dir>
 """
 import argparse
 import json

@@ -25,7 +25,6 @@ from autogluon.tabular.models.tabular_nn.torch.tabular_nn_torch import \
 from autogluon.tabular.predictor import TabularPredictor
 
 SAFE_CPU_PERCENTAGE = 0.7
-DEFAULT_PLOT_STYLE = os.path.join(os.path.dirname(__file__), 'presentation.mplstyle')
 
 
 def get_default_cpu_number():

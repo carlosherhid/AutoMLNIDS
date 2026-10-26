@@ -9,8 +9,8 @@ probability for the positive (malicious) class, and the max/mean absolute
 probability difference.
 
 Usage:
-    python scripts/verify_functional_equivalence.py --predictor_path ./balanced_binary/automl_search \
-        --data_dir ./balanced_binary --normal_model_path ./balanced_binary/compressed_models/normal_pytorch_model_exp6.pth
+    python scripts/verify_functional_equivalence.py --predictor_path <predictor_dir> \
+        --data_dir <data_dir> --normal_model_path <normal_checkpoint>
 """
 import argparse
 import os

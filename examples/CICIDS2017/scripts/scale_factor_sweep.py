@@ -8,8 +8,8 @@ script simple and reuses the exact same code path/logging as every other
 experiment), then plots accuracy vs. factor.
 
 Usage:
-    python scripts/scale_factor_sweep.py --predictor_path ./balanced_binary/automl_search \
-        --data_dir ./balanced_binary --output_dir ./balanced_binary/compressed_models \
+    python scripts/scale_factor_sweep.py --predictor_path <predictor_dir> \
+        --data_dir <data_dir> --output_dir <output_dir> \
         --factors 1e2 1e3 1e4 1e5 1e6 1e7 1e8 --epochs 100 --experiment_number_base 600
 """
 import argparse

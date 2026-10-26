@@ -12,8 +12,8 @@ share of its values falls on its most frequent code. It is a diagnostic of the i
 representation, not a measurement of the trained model's observers.
 
 Usage:
-    python scripts/input_resolution_diagnostic.py --data_dir ./balanced_binary \
-        --output_csv ./paper_results/CICIDS2017/input_resolution_diagnostic.csv
+    python scripts/input_resolution_diagnostic.py --data_dir <data_dir> \
+        --output_csv <output_csv>
 """
 import argparse
 import os

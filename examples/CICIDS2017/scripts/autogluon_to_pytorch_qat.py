@@ -219,14 +219,7 @@ def train_pytorch_model(model, train_loader, val_loader, epochs, device, use_ear
             scheduler.step(val_loss)
 
         # Track the best checkpoint by val_accuracy regardless of whether early
-        # stopping is enabled - without this, training instability late in a run
-        # (common with QAT's noisier fake-quantized gradients, especially with
-        # --disable_lr_scheduler's fixed LR) silently returns a collapsed
-        # last-epoch model even though a much better checkpoint existed earlier
-        # (e.g. exp2 seed=0 on CICIDS2017: peaked at val_accuracy=0.9588 on
-        # epoch 14, then collapsed to 0.5000 by epoch 24 - the un-fixed code
-        # returned the collapsed epoch-24 model since early stopping only halts
-        # further epochs, it never rolled back to the best one).
+        # stopping is enabled 
         if val_accuracy > best_val_accuracy:
             best_val_accuracy = val_accuracy
             best_state_dict = copy.deepcopy(model.state_dict())
@@ -288,9 +281,7 @@ def evaluate_model(model, test_loader, device):
 
 def evaluate_model_detailed(model, loader, device):
     """Confusion-matrix metrics on a loader; the positive class is label 1 (malicious).
-    Recall = TPR = TP/(TP+FN); FPR = FP/(FP+TN). TPR and FPR do not depend on the class
-    prevalence, so they transfer to the unbalanced traffic of a real deployment (precision
-    does not: it can be projected from them for any prevalence)."""
+    Recall = TPR = TP/(TP+FN); FPR = FP/(FP+TN)."""
     model.eval()
     tp = fp = tn = fn = 0
     with torch.no_grad():
@@ -316,10 +307,6 @@ def print_detailed_metrics(name, metrics):
 
 
 def print_size_of_model(model):
-    # Unique directory but always the file name "temp.p": jobs running in parallel
-    # from the same working directory used to overwrite/delete each other's temp.p,
-    # and the file *name* changes the size of torch.save's zip archive by ~1 KB, so
-    # it must stay "temp.p" for sizes to remain comparable with earlier results.
     tmp_dir = tempfile.mkdtemp()
     tmp_path = os.path.join(tmp_dir, "temp.p")
     torch.save(model.state_dict(), tmp_path)
@@ -432,8 +419,6 @@ def main():
 
     # Load the AutoGluon predictor
     # require_version_match=False / require_py_version_match=False: predictors
-    # trained on an older AutoGluon/Python (e.g. 1.1.1 on Python 3.10) still
-    # load fine on the cluster's newer 1.6.x/Python 3.11 in practice.
     predictor = TabularPredictor.load(
         args.predictor_path, require_version_match=False, require_py_version_match=False)
     patch_stale_predictor(predictor)
@@ -515,15 +500,6 @@ def main():
                 print(torch.int_repr(layer.weight))
                 break
 
-    # Evaluate AutoGluon model on the modified test set if any modifications were applied.
-    # This is a sanity-check comparison only - the PyTorch normal/QAT checkpoints
-    # above are already trained and saved by this point. Wrapped in try/except
-    # because predictor.evaluate() can hit AutoGluon-internal AttributeErrors when
-    # a predictor pickled on an older AutoGluon (e.g. 1.1.1) is loaded on a newer
-    # one (1.6.2) - AutoGluon's own load() warning calls exceptions like this
-    # "very cryptic" but expected. Letting it propagate would abort the whole
-    # run_multiseed.py sweep (subprocess.run(check=True)) after seed 0, discarding
-    # every already-trained checkpoint for the remaining seeds.
     try:
         if args.modify_test or args.scale_close_to_zero or args.prune_features:
             print("Evaluating AutoGluon model on the modified test dataset.")

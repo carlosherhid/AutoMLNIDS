@@ -1,21 +1,10 @@
 """
-Precision / recall (TPR) / FPR / F1 for the multi-seed checkpoints that were trained
-before autogluon_to_pytorch_qat.py started logging them - no retraining needed: every
-seed's FP32 and QAT checkpoints are still in compressed_models/ and only have to be
-re-evaluated on the test set. Recall and FPR are class-conditional, so they do not
-depend on the 50/50 balance of the test set (precision does) and can be
-projected to a realistic traffic mix.
-
-The inputs must be rebuilt exactly as during training: paper Experiments 4 and 5
-(internal 6 and 7) were trained on near-zero-rescaled features, Experiment 5 also with
-the 8 selected features (the other 53 set to zero). Each recomputed accuracy is checked
-against the one logged in multiseed_exp<N>_results.csv, which validates this rebuild.
-
+Precision / recall (TPR) / FPR / F1 for the multi-seed checkpoints
 Usage:
-    python scripts/evaluate_checkpoint_metrics.py --predictor_path ./balanced_binary/automl_search \
-        --data_dir ./balanced_binary --logs_dir ./balanced_binary/compressed_models \
-        --important_features_file ./balanced_binary/automl_search/feature_ranking_custom_sbe/important_features.txt \
-        --output_csv ./balanced_binary/compressed_models/detailed_metrics.csv
+    python scripts/evaluate_checkpoint_metrics.py --predictor_path <predictor_dir> \
+        --data_dir <data_dir> --logs_dir <logs_dir> \
+        --important_features_file <features_file> \
+        --output_csv <output_csv>
 """
 import argparse
 import os

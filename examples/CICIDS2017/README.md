@@ -17,8 +17,6 @@ scripts/feature_ranking.py            sequential backward elimination (feature s
 scripts/autogluon_to_pytorch_qat.py   replicates the AutoGluon architecture in PyTorch and trains the FP32 and QAT
                                       models, with the near-zero feature rescaling and optional feature selection
                                       -> normal/qat *.pth checkpoints and execution_log_exp<N>.txt
-        |
-scripts/show_architecture.py          inspect or compare the layers of a .pkl (AutoGluon) or .pth (PyTorch) model
 ```
 
 The commands of the experiments of the paper are in [`docs/EXPERIMENTS_LOG.md`](docs/EXPERIMENTS_LOG.md).
@@ -38,9 +36,6 @@ The commands of the experiments of the paper are in [`docs/EXPERIMENTS_LOG.md`](
 | `build_preprocessing_table.py`, `input_resolution_diagnostic.py` | near-zero rescaling against other input preprocessings |
 | `scale_factor_sweep.py` | accuracy as a function of the rescaling factor |
 | `robustness_noise_eval.py` | accuracy under Gaussian input noise, FP32 vs. QAT |
-| `inspect_automl_budget.py`, `inspect_automl_inputs.py` | what the AutoGluon search used, and how its inputs map to dataset columns |
-| `print_env_info.py` | software and hardware environment of the machine |
-| `plot_paper_figures.py`, `make_dataset_figures.py`, `make_pipeline_diagram.py` | figures |
 
 `scripts/patches/autogluon_auto_trainer.py` is **not** run directly: it replaces a file inside the installed
 AutoGluon package that the hyperparameter search needs, see [`scripts/patches/README.md`](scripts/patches/README.md).
