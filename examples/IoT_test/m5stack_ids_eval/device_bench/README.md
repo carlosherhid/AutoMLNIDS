@@ -47,6 +47,6 @@ The firmware receives the **raw Min-Max** rows (`data/test_device.csv`) and appl
 
 * **Five seeds:** export the 5 `qat_pytorch_model_exp1004XX.pth` / `normal_pytorch_model_exp1004XX.pth` checkpoints (Experiment 4, whose
   near-zero rescaling is the one the firmware applies; Experiment 6 is the standardization) of the cluster
-  with `export_qat_int8.py` and `export_mlp_to_header.py`, rebuild the headers and repeat step 4 with `--limit 20000`.
+  with `export_qat_int8.py` and `export_mlp_to_header.py` (add `--assume_relu`, or `--architecture_json` as described in `INT8_DEPLOYMENT.md`), rebuild the headers and repeat step 4 with `--limit 20000`.
 * **Energy:** needs an inline USB power meter with logging (or an INA219). Run the `BENCH` stream for 60 s at the maximum rate
   for FP32 and INT8, and an idle baseline with the display off; energy per inference = (P_active - P_idle) / throughput.

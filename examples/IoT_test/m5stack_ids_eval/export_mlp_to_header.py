@@ -3,6 +3,8 @@ import re
 from pathlib import Path
 import torch
 
+from architecture_check import add_arguments, verify
+
 
 def extract_layer_index(key: str):
     """
@@ -27,6 +29,7 @@ def main():
     parser.add_argument("--model_path", required=True)
     parser.add_argument("--output_header", required=True)
     parser.add_argument("--model_name", required=True)
+    add_arguments(parser)
     args = parser.parse_args()
 
     model_path = Path(args.model_path)
@@ -46,6 +49,9 @@ def main():
 
     if not layer_entries:
         raise ValueError("No se encontraron capas lineales exportables.")
+
+    # the FP32 firmware also applies a ReLU after every hidden layer: stop if the network is not known to be ReLU-only
+    verify(args, [tuple(w.shape) for _, _, w in layer_entries])
 
     # Infer layer sizes
     layer_sizes = []

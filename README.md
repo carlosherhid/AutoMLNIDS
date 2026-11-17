@@ -6,7 +6,8 @@ Learning Models for Edge Network Intrusion Detection* (anonymized for review).
 The pipeline takes the neural network that AutoGluon selects for binary intrusion detection, rebuilds its topology in
 PyTorch, trains it there with Quantization-Aware Training (QAT) after a preprocessing step aimed at the near-zero feature
 values that collapse under INT8 quantization, and exports the result as an int8 model (integer matrix products with int32
-accumulation and one float32 requantization multiplier per layer) that runs on an M5Stack Basic (ESP32). It is run on four datasets with the same procedure: the corrected release of
+accumulation and one float32 requantization multiplier per layer) that runs on an M5Stack Basic (ESP32). It is run on four datasets with the same experiments (UNSW-NB15 with the BatchNorm-folded protocol of
+[`cluster/README.md`](cluster/README.md), because the BatchNorm-free replica of its AutoML network does not train): the corrected release of
 [CICIDS2017](https://www.unb.ca/cic/datasets/ids-2017.html) (`CICIDS2017_improved`),
 [UNSW-NB15](https://research.unsw.edu.au/projects/unsw-nb15-dataset), TON_IoT (network data) and
 [CICIoT2023](https://www.unb.ca/cic/datasets/iotdataset-2023.html).

@@ -12,6 +12,13 @@ same training run) and writes `arduino_m5_ids_int8/exp6_qat_int8_model.h`:
 * the input quantization (scale, zero point), and per layer the input/output zero points and the float
   requantization multiplier `s_in * s_w / s_out`.
 
+The checkpoint does not record its activation function and the firmware implements only ReLU, so the exporter stops unless it is told what the
+network is: `--architecture_json <automl_model_summary.json>` (written by `describe_automl_model.py`) checks that the network has no layer the
+firmware lacks (the AutoML search can choose Tanh) and that its Linear layers are those of the checkpoint (the width of the first layer's input is
+not compared: the AutoGluon network can take more inputs than the data has columns); `--assume_relu` skips the check for a network known to use ReLU
+(the checkpoint included in this folder is one). `export_mlp_to_header.py`, for the FP32 firmware, takes the same two options. The firmware also
+limits the network to 64 inputs and 128 neurons per layer (`MAX_INPUTS`, `MAX_NEURONS`); the exporters do not check it.
+
 Before flashing, the script checks that the exact integer arithmetic of the firmware reproduces PyTorch's
 quantized model (engine `onednn`, which does not saturate), and that the header, parsed back, is the same
 network. Results with this checkpoint (rescaled CICIDS2017 test set, 166,967 rows):

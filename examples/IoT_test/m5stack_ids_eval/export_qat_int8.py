@@ -18,8 +18,10 @@ of the firmware loop is run on a few rows to check the exported layout (row-majo
 Usage:
     python export_qat_int8.py --qat_model <qat_checkpoint> \
         --output_header arduino_m5_ids_int8/exp6_qat_int8_model.h --model_name exp6_qat_int8 \
-        --check_csv <test_device_scaled.csv>
-The check CSV has 61 features and the label (last column), without header, as sent to the device.
+        --check_csv <test_device_scaled.csv> --architecture_json <automl_model_summary.json>
+The check CSV has the features (already preprocessed as the network was trained) and the label (last column), without header, as sent to
+the device. The checkpoint does not record its activation function and the firmware only implements ReLU: --architecture_json (see
+architecture_check.py) verifies it, or --assume_relu for a network known to be ReLU-only; without one of them the export stops.
 """
 import argparse
 import re
@@ -30,6 +32,8 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.quantization import DeQuantStub, QuantStub, convert, prepare_qat
+
+from architecture_check import add_arguments, verify
 
 
 class Base(nn.Module):
@@ -178,6 +182,7 @@ def main():
     parser.add_argument('--model_name', default='exp6_qat_int8')
     parser.add_argument('--check_csv', default=None, help='device CSV (61 features + label, no header) used to check the export')
     parser.add_argument('--engine', default='onednn', help='PyTorch engine for the reference predictions (an engine that does not saturate)')
+    add_arguments(parser)
     args = parser.parse_args()
 
     if args.engine in torch.backends.quantized.supported_engines:
@@ -186,6 +191,7 @@ def main():
     state = torch.load(args.qat_model, map_location='cpu')
     model, indices = load_quantized_model(state)
     params = extract_parameters(model, indices)
+    verify(args, [layer['weight'].shape for layer in params['layers']])      # stops here, before anything is written, unless the network is ReLU-only
     sizes = write_header(params, args.output_header, args.model_name, Path(args.qat_model).name)
     print('layer sizes:', sizes, '| int8 weights:', sum(l['weight'].size for l in params['layers']), 'bytes | int32 biases:',
           sum(l['bias_i32'].size for l in params['layers']) * 4, 'bytes')
