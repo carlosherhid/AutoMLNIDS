@@ -15,6 +15,7 @@ Thumbs.db
 *.onnx
 execution_log_exp*.txt
 paper_results/
+telemetry/
 examples/*/original/
 examples/*/balanced_binary/compressed_models/
 examples/*/balanced_binary/automl_search/models/

@@ -1,6 +1,6 @@
-# CICIoT2023: second dataset
+# CICIoT2023
 
-Second validation dataset. It reuses the scripts of [`../CICIDS2017/scripts/`](../CICIDS2017/scripts): every script
+One of the four datasets of the paper, run with exactly the same experiments as the others. It reuses the scripts of [`../CICIDS2017/scripts/`](../CICIDS2017/scripts): every script
 takes its data and output directories as arguments, so nothing is duplicated.
 
 [`dataset_creator.py`](../CICIDS2017/scripts/dataset_creator.py) recognizes CICIoT2023 from the directory name
@@ -14,11 +14,11 @@ and reduced subsets); check those column names against the CSV variant you downl
    [official page](https://www.unb.ca/cic/datasets/iotdataset-2023.html) into `original/`.
 2. Build the balanced binary dataset, from `examples/CICIoT2023/`:
    ```bash
-   python ../CICIDS2017/scripts/dataset_creator.py --directory ./original --test-size 0.3 --finetune-size 0.5 --validation-size 0.2 --composition balanced --problem-type binary --keep-attack-type
+   python ../CICIDS2017/scripts/dataset_creator.py --directory ./original --seeds 0,1,2,3,4 --keep-attack-type
    ```
    `--keep-attack-type` additionally writes `{split}_attack_types.csv` next to each split.
 3. Every following stage (AutoML search, translation to PyTorch, QAT, feature ranking, baselines) is the one of
-   CICIDS2017 with `--data_dir` / `--directory` pointing to `./balanced_binary` of this folder; see
+   CICIDS2017 with the paths pointing to `./balanced_binary/split_<seed>` of this folder (the AutoML search on `split_0`); see
    [`../CICIDS2017/README.md`](../CICIDS2017/README.md) and
    [`../CICIDS2017/docs/EXPERIMENTS_LOG.md`](../CICIDS2017/docs/EXPERIMENTS_LOG.md).
 

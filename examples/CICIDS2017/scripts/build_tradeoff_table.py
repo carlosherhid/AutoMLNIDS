@@ -26,12 +26,18 @@ import torch
 from autogluon.tabular import TabularPredictor
 
 sys.path.insert(0, os.path.dirname(__file__))
+from utils.experiments import EXPERIMENTS, PAPER_EXPERIMENTS, split_experiment_number  # noqa: E402
 from utils.log_parsing import parse_log_file  # noqa: E402
+from utils.quantization import DEFAULT_ENGINE, set_quantized_engine  # noqa: E402
 from utils.model import network_layers_sparsity, get_prunable  # noqa: E402
+from utils.cpu_loading import allow_cpu_loading  # noqa: E402
 from autogluon_to_pytorch_qat import AutoReplicatedNN, QATWrapper, get_model_architecture  # noqa: E402
 
-# Internal --experiment_number -> paper Experiment (see docs/EXPERIMENTS_LOG.md)
-PAPER_EXPERIMENTS = {1: 'Exp. 1', 2: 'Exp. 2', 3: 'Exp. 3', 6: 'Exp. 4', 7: 'Exp. 5'}
+
+def paper_experiment(exp_number):
+    """Label of the paper experiment a run belongs to ('' for runs that are not one of Exp. 1-5)."""
+    base, _ = split_experiment_number(exp_number)
+    return EXPERIMENTS[base][0] if base in PAPER_EXPERIMENTS else ''
 
 
 def cpu_model():
@@ -97,19 +103,18 @@ def main():
     parser.add_argument('--skip_latency', action='store_true', help='Skip the (slower) on-CPU latency measurement')
     parser.add_argument('--latency_batch_sizes', type=str, default='1,8,32,64,128',
                          help='Comma-separated batch sizes to measure per-sample latency at')
-    parser.add_argument('--engine', type=str, default=None,
-                        help='torch.backends.quantized.engine for the quantized models (default: PyTorch default, x86)')
+    parser.add_argument('--engine', type=str, default=DEFAULT_ENGINE,
+                        help='torch.backends.quantized.engine for the quantized models (default: onednn, the engine every reported INT8 number uses)')
     parser.add_argument('--threads', type=int, default=None,
                         help='torch.set_num_threads for the latency measurements (default: PyTorch default)')
     parser.add_argument('--only_paper_experiments', action='store_true',
-                        help='Only process the experiments reported in the paper (internal numbers 1, 2, 3, 6, 7)')
+                        help='Only process Experiments 1-5 of the paper: the run of --paper_seed of each one')
+    parser.add_argument('--paper_seed', type=int, default=0,
+                        help='with --only_paper_experiments, the seed whose trained model represents each experiment')
     args = parser.parse_args()
     batch_sizes = [int(b) for b in args.latency_batch_sizes.split(',')]
 
-    if args.engine:
-        if args.engine not in torch.backends.quantized.supported_engines:
-            raise SystemExit(f'engine {args.engine!r} not supported; supported: {torch.backends.quantized.supported_engines}')
-        torch.backends.quantized.engine = args.engine
+    set_quantized_engine(args.engine)
     if args.threads:
         torch.set_num_threads(args.threads)
     environment = {'engine': torch.backends.quantized.engine, 'threads': torch.get_num_threads(),
@@ -120,12 +125,16 @@ def main():
         glob.glob(os.path.join(args.logs_dir, 'execution_log_exp*.txt')),
         key=lambda p: int(re.search(r'exp(\d+)', p).group(1)))
     if args.only_paper_experiments:
-        log_files = [p for p in log_files if int(re.search(r'exp(\d+)', p).group(1)) in PAPER_EXPERIMENTS]
+        def is_paper_run(path):
+            base, seed = split_experiment_number(int(re.search(r'exp(\d+)', path).group(1)))
+            return base in PAPER_EXPERIMENTS and seed in (None, args.paper_seed)
+        log_files = [p for p in log_files if is_paper_run(p)]
 
     predictor = None
     architecture = None
     X_sample = None
     if not args.skip_latency:
+        allow_cpu_loading()
         # require_version_match=False / require_py_version_match=False:
         # predictor may have been trained on an older AutoGluon/Python than
         # what's installed - see autogluon_to_pytorch_qat.py.
@@ -140,7 +149,8 @@ def main():
         exp_number = int(re.search(r'exp(\d+)', log_file).group(1))
         parsed = parse_log_file(log_file)
         parsed['experiment_number'] = exp_number
-        parsed['paper_experiment'] = PAPER_EXPERIMENTS.get(exp_number, '')
+        parsed['paper_experiment'] = paper_experiment(exp_number)
+        parsed['seed'] = split_experiment_number(exp_number)[1]
         parsed.update(environment)
 
         if not args.skip_latency:

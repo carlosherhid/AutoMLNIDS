@@ -3,11 +3,13 @@
 Code and firmware accompanying the paper *Quantization-Aware Training of AutoML-Optimized Deep
 Learning Models for Edge Network Intrusion Detection* (anonymized for review).
 
-The pipeline takes the neural network that AutoGluon selects for binary intrusion detection on
-[CICIDS2017](https://www.unb.ca/cic/datasets/ids-2017.html), replicates its architecture in PyTorch, trains it with
-Quantization-Aware Training (QAT) after a preprocessing step aimed at the near-zero feature values that collapse
-under INT8 quantization, and exports the result as an integer-only model that runs on an M5Stack Basic (ESP32).
-[CICIoT2023](https://www.unb.ca/cic/datasets/iotdataset-2023.html) is used as a second dataset.
+The pipeline takes the neural network that AutoGluon selects for binary intrusion detection, replicates its architecture
+in PyTorch, trains it with Quantization-Aware Training (QAT) after a preprocessing step aimed at the near-zero feature
+values that collapse under INT8 quantization, and exports the result as an integer-only model that runs on an M5Stack
+Basic (ESP32). It is run on four datasets with the same procedure: the corrected release of
+[CICIDS2017](https://www.unb.ca/cic/datasets/ids-2017.html) (`CICIDS2017_improved`),
+[UNSW-NB15](https://research.unsw.edu.au/projects/unsw-nb15-dataset), TON_IoT (network data) and
+[CICIoT2023](https://www.unb.ca/cic/datasets/iotdataset-2023.html).
 
 ## Pipeline
 
@@ -27,7 +29,6 @@ requirements.txt                          software stack of the paper (Python 3.
 cluster/                                  SLURM job scripts
 examples/CICIDS2017/scripts/              all pipeline and analysis scripts (see examples/CICIDS2017/README.md)
 examples/CICIDS2017/docs/EXPERIMENTS_LOG.md   commands of the experiments of the paper
-examples/CICIDS2017/balanced_binary/automl_search/feature_ranking_custom_sbe/   features kept in Experiment 5
 examples/CICIoT2023/                      how the second dataset is built (reuses the CICIDS2017 scripts)
 examples/IoT_test/m5stack_ids_eval/       M5Stack deployment: INT8 export, firmware, device benchmark
 ```
@@ -53,19 +54,22 @@ cluster, see [`cluster/README.md`](cluster/README.md).
 
 ## Experiments of the paper
 
-The five experiments of Table 1 correspond to these internal `--experiment_number` values:
+Every dataset is run with the same experiments, numbered as in the paper (`run_multiseed.py --experiment N`; the
+definitions are in `examples/CICIDS2017/scripts/utils/experiments.py`):
 
-| Paper | Description | `--experiment_number` |
-|---|---|---|
-| Exp. 1 | baseline, no early stopping, no LR scheduling | 1 |
-| Exp. 2 | early stopping enabled | 2 |
-| Exp. 3 | LR scheduling enabled | 3 |
-| Exp. 4 | near-zero feature scaling (x1e6) | 6 |
-| Exp. 5 | Exp. 4 + feature selection | 7 |
+| Exp. | Description |
+|---|---|
+| 1 | baseline, no early stopping, no LR scheduling |
+| 2 | early stopping enabled |
+| 3 | LR scheduling enabled |
+| 4 | near-zero feature scaling (x1e6) |
+| 5 | Exp. 4 + feature selection (run for reproducibility; not reported in the paper) |
+| 6, 7, 8 | Exp. 3 with standardization, logarithmic Min-Max or a quantile transform of the input instead of the near-zero rescaling (input-representation comparison) |
 
-`examples/CICIDS2017/docs/EXPERIMENTS_LOG.md` lists the exact command of each run, and
-`examples/CICIDS2017/scripts/run_multiseed.py` repeats one configuration over several seeds (the paper reports
-5 seeds). Each run writes its training log (`execution_log_exp<N>.txt`) next to its checkpoints.
+Each experiment is repeated over 5 seeds, seed *i* on its own data split `split_<i>`. A run of experiment *N* with
+seed *S* is stored as `*_exp<100000 + N*100 + S>.pth` / `execution_log_exp<...>.txt` next to the checkpoints.
+`examples/CICIDS2017/docs/EXPERIMENTS_LOG.md` lists the commands, and `cluster/submit_experiments.sh` submits the whole
+sequence for one dataset on a SLURM cluster.
 
 ## On-device evaluation
 
@@ -74,7 +78,8 @@ and requantization multipliers, checked bit by bit against an integer emulation,
 `examples/IoT_test/m5stack_ids_eval/device_bench/README.md` describes the benchmark that runs the full test set on
 the board (accuracy, latency distribution, memory, throughput).
 
-The host-side scripts read the checkpoints of internal experiment 6 (`normal_pytorch_model_exp6.pth`,
-`qat_pytorch_model_exp6.pth`), which have to be copied to `examples/IoT_test/m5stack_ids_eval/`. The exported
-firmware headers (`exp6_qat_int8_model.h`, `exp6_normal_model.h`) are included, so the validated sketches compile
-without retraining; `device_bench/make_bench_samples.py` generates `bench_samples.h` for the benchmark sketches.
+The host-side scripts read the Experiment 4 checkpoints under the names `normal_pytorch_model_exp6.pth` and
+`qat_pytorch_model_exp6.pth` (historical names: copy the seed-0 pair, `*_exp100400.pth`, to
+`examples/IoT_test/m5stack_ids_eval/` with those names). The exported firmware headers (`exp6_qat_int8_model.h`,
+`exp6_normal_model.h`) are included, so the validated sketches compile without retraining;
+`device_bench/make_bench_samples.py` generates `bench_samples.h` for the benchmark sketches.

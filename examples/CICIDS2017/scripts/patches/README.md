@@ -3,35 +3,21 @@
 Two unrelated workarounds needed to run `automl_model_search.py` with the AutoGluon version pinned in
 [`requirements.txt`](../../../../requirements.txt).
 
-## 1. `autogluon_auto_trainer.py` — AutoGluon library file replacement
+## 1. `apply_autogluon_patch.py`: one-expression fix of an AutoGluon file
 
-**Not a script to run.** It is a drop-in replacement for AutoGluon's own internal
-file:
-
-```
-<your-venv>/lib/python3.X/site-packages/autogluon/tabular/trainer/auto_trainer.py
-```
-
-It works around an `unhashable type: 'slice'` error that AutoGluon raises during
-hyperparameter search on this project's setup (`fit()` logs hyperparameters by
-slicing `hyperparameters[k][:3]` unconditionally, but `NN_TORCH`'s value is a
-dict, not a list — this patch adds an `isinstance(..., list)` check first). To
-apply it by hand, copy this file over the one installed in your virtual
-environment (back up the original first):
+**Not part of the pipeline: run it once per environment** (`cluster/setup_env.sbatch` does it after every installation). In some AutoGluon versions
+`tabular/trainer/auto_trainer.py` logs `hyperparameters[k][:3]` for every model family, but the value of `NN_TORCH` is a dict (a search space),
+not a list, so the search stops with `TypeError: unhashable type: 'slice'`. The script guards that one expression with an `isinstance(..., list)`
+check. **AutoGluon 1.6.2, the pinned version, already has that guard, so there the script prints `already patched` and changes nothing**; it is
+kept as a safety net for versions without it. It edits only that expression, never replaces the file (the file differs between AutoGluon
+versions), refuses to write a file that does not parse, and can be run again safely:
 
 ```bash
-cp scripts/patches/autogluon_auto_trainer.py <your-venv>/lib/python3.X/site-packages/autogluon/tabular/trainer/auto_trainer.py
+python scripts/patches/apply_autogluon_patch.py
 ```
 
-Confirmed byte-identical to the installed file (aside from the fix above) on
-AutoGluon 0.8.2, 1.0.0, and 1.6.2 (checked by diffing against the actual installed
-file each time). If a newer AutoGluon version ever changes this
-file further, `cp` may need to go back to being a smaller hand-applied diff
-instead of a full-file replacement.
-
-[`cluster/setup_env.sbatch`](../../../../cluster/setup_env.sbatch) applies this
-patch automatically after every `pip install`, so on the cluster you don't need
-to run the command above by hand.
+Earlier versions of this folder also held `autogluon_auto_trainer.py`, a full copy of that file taken from an old AutoGluon. It was removed: copied over
+the installed file it makes `import autogluon.tabular` fail on AutoGluon 1.6.2 (`cannot import name 'MODEL_TYPES'`).
 
 ## 2. `sklearn_writeable_array_fix.py` — importable Python patch, not a file replacement
 

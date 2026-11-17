@@ -8,7 +8,7 @@ Usage:
     python scripts/robustness_noise_eval.py --predictor_path <predictor_dir> \
         --data_dir <data_dir> --normal_model_path <normal_checkpoint> \
         --qat_model_path <qat_checkpoint> \
-        --scale_close_to_zero   # exp6/exp7 were trained with near-zero scaling; exp1-3 were not
+        --scale_close_to_zero   # Experiments 4 and 5 were trained with near-zero scaling; 1-3 were not
 """
 import argparse
 import os
@@ -21,6 +21,8 @@ from autogluon.tabular import TabularPredictor
 from sklearn.preprocessing import LabelEncoder
 
 from autogluon_to_pytorch_qat import AutoReplicatedNN, QATWrapper, get_model_architecture, set_all_seeds
+from utils.quantization import DEFAULT_ENGINE, set_quantized_engine
+from utils.cpu_loading import allow_cpu_loading
 
 
 def load_normal(path, architecture, input_feature_size):
@@ -67,22 +69,24 @@ def main():
     parser.add_argument('--scale_close_to_zero', action='store_true',
                          help='Must match how the checkpoints were trained (e.g. paper Experiments 4/5)')
     parser.add_argument('--scale_factor', type=float, default=1e6)
+    parser.add_argument('--engine', type=str, default=DEFAULT_ENGINE,
+                        help='torch.backends.quantized.engine that runs the INT8 model (default: onednn, as in the training script)')
     args = parser.parse_args()
 
     set_all_seeds(args.seed)
+    print(f'Quantized engine: {set_quantized_engine(args.engine)}')
     args.output_dir = args.output_dir or os.path.dirname(args.qat_model_path)
 
     test_data = pd.read_csv(os.path.join(args.data_dir, 'test.csv'), index_col='ID')
     y = torch.tensor(LabelEncoder().fit_transform(test_data['Label']), dtype=torch.long)
     X_values = test_data.drop(columns=['Label']).values
     if args.scale_close_to_zero:
-        # Same rule as load_data() in autogluon_to_pytorch_qat.py, applied in memory
-        # (load_data() also writes *_scaled.csv files into data_dir, which would race
-        # with any other job scaling the same dataset at the same time).
+        # Same rule as load_data() in autogluon_to_pytorch_qat.py, applied in memory.
         X_values = np.where(np.abs(X_values) < 1e-6, X_values * args.scale_factor, X_values)
     X = torch.tensor(X_values, dtype=torch.float32)
     feature_std = X.std(dim=0, keepdim=True)
 
+    allow_cpu_loading()
     # require_version_match=False / require_py_version_match=False: predictor
     # may have been trained on an older AutoGluon/Python than what's installed
     # - see autogluon_to_pytorch_qat.py.

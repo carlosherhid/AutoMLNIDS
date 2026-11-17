@@ -1,11 +1,11 @@
 """
 Table comparing the near-zero rescaling with alternative input preprocessings under the same
-QAT protocol (CICIDS2017, 5 seeds): accuracy of the FP32 and QAT models, and recall, FPR and
+QAT protocol (5 seeds, one data split per seed): accuracy of the FP32 and QAT models, and recall, FPR and
 F1-score of the QAT model, as mean +/- std over seeds, plus Welch t-tests of the QAT accuracy
 and FPR of the proposed rescaling against each alternative.
 
 Usage:
-    python scripts/build_preprocessing_table.py --results_dir <results_dir>
+    python scripts/build_preprocessing_table.py --results_dir <compressed_models dir with the multiseed_exp*_results.csv>
 """
 import argparse
 import os
@@ -13,27 +13,22 @@ import os
 import pandas as pd
 from scipy import stats
 
-# label -> (multiseed base, paper experiment in detailed_metrics.csv or None if the log has the metrics)
+# label -> experiment number (utils/experiments.py); the metrics of every run are in its multiseed CSV
 VARIANTS = [
-    ('Min-Max only (Exp. 3)', 3, 'Exp. 3'),
-    ('Standardization', 50, None),
-    ('Log Min-Max', 51, None),
-    ('Quantile transform', 52, None),
-    ('Near-zero rescaling (Exp. 4)', 6, 'Exp. 4'),
+    ('Min-Max only (Exp. 3)', 3),
+    ('Standardization', 6),
+    ('Log Min-Max', 7),
+    ('Quantile transform', 8),
+    ('Near-zero rescaling (Exp. 4)', 4),
 ]
 PROPOSED = 'Near-zero rescaling (Exp. 4)'
 
 
-def load_variant(results_dir, base, paper_experiment, detailed):
+def load_variant(results_dir, base):
     df = pd.read_csv(os.path.join(results_dir, f'multiseed_exp{base}_results.csv')).sort_values('seed').reset_index(drop=True)
     out = pd.DataFrame({'seed': df['seed'], 'fp32_acc': df['normal_test_accuracy'], 'qat_acc': df['qat_test_accuracy']})
-    if paper_experiment is not None:  # metrics come from the checkpoint evaluation
-        qat = detailed[(detailed.paper_experiment == paper_experiment) & (detailed.model == 'qat')].sort_values('seed')
-        for metric in ('recall', 'fpr', 'f1'):
-            out[f'qat_{metric}'] = qat[metric].values * 100
-    else:
-        for metric in ('recall', 'fpr', 'f1'):
-            out[f'qat_{metric}'] = df[f'qat_{metric}'] * 100
+    for metric in ('recall', 'fpr', 'f1'):
+        out[f'qat_{metric}'] = df[f'qat_{metric}'] * 100
     return out
 
 
@@ -46,8 +41,7 @@ def main():
     parser.add_argument('--results_dir', type=str, required=True)
     args = parser.parse_args()
 
-    detailed = pd.read_csv(os.path.join(args.results_dir, 'detailed_metrics.csv'))
-    data = {label: load_variant(args.results_dir, base, exp, detailed) for label, base, exp in VARIANTS}
+    data = {label: load_variant(args.results_dir, base) for label, base in VARIANTS}
 
     print('% label & FP32 acc & QAT acc & QAT recall & QAT FPR & QAT F1')
     for label, df in data.items():

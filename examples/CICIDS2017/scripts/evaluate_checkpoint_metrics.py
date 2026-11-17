@@ -1,10 +1,12 @@
 """
-Precision / recall (TPR) / FPR / F1 for the multi-seed checkpoints
+Precision / recall (TPR) / FPR / F1 for the multi-seed checkpoints of Experiments 1-5, evaluated on the test set of each
+seed's own split. The logs already carry these metrics for the engine the models were trained with; this script re-evaluates the
+checkpoints, which is how a different quantized engine is compared (--engine).
 Usage:
     python scripts/evaluate_checkpoint_metrics.py --predictor_path <predictor_dir> \
-        --data_dir <data_dir> --logs_dir <logs_dir> \
+        --data_dir_template "<data>/balanced_binary/split_{seed}" --logs_dir <logs_dir> \
         --important_features_file <features_file> \
-        --output_csv <output_csv>
+        --output_csv <output_csv> [--engine onednn]
 """
 import argparse
 import os
@@ -20,15 +22,17 @@ from torch.utils.data import DataLoader, TensorDataset
 sys.path.insert(0, os.path.dirname(__file__))
 from autogluon_to_pytorch_qat import evaluate_model_detailed, get_model_architecture  # noqa: E402
 from build_tradeoff_table import try_load_checkpoint  # noqa: E402
+from utils.quantization import DEFAULT_ENGINE, set_quantized_engine  # noqa: E402
+from utils.experiments import EXPERIMENTS, PAPER_EXPERIMENTS, RESCALES, SELECTS_FEATURES  # noqa: E402
+from utils.cpu_loading import allow_cpu_loading  # noqa: E402
 
-# internal --experiment_number_base -> (paper experiment, rescale near-zero, select features)
-EXPERIMENTS = {1: ('Exp. 1', False, False), 2: ('Exp. 2', False, False), 3: ('Exp. 3', False, False),
-               6: ('Exp. 4', True, False), 7: ('Exp. 5', True, True)}
+# experiment -> (paper label, rescale near-zero, select features)
+CHECKED = {base: (EXPERIMENTS[base][0], base in RESCALES, base in SELECTS_FEATURES) for base in PAPER_EXPERIMENTS}
 
 
 def load_test_features(data_dir, rescale, selected_features_file, scale_factor):
     """Same inputs as autogluon_to_pytorch_qat.py's load_data()/prune_features(), in memory
-    (load_data() also writes *_scaled.csv files into data_dir, which is unnecessary here)."""
+    (load_data() only writes its modified copies when asked to, and not here)."""
     test = pd.read_csv(os.path.join(data_dir, 'test.csv'))
     labels = LabelEncoder().fit_transform(test['Label'])
     features = test.drop(columns=['ID', 'Label'])
@@ -44,37 +48,38 @@ def load_test_features(data_dir, rescale, selected_features_file, scale_factor):
 def main():
     parser = argparse.ArgumentParser(description='Detailed metrics for the multi-seed checkpoints')
     parser.add_argument('--predictor_path', type=str, required=True)
-    parser.add_argument('--data_dir', type=str, required=True)
+    parser.add_argument('--data_dir', type=str, default=None, help='one split used by every seed')
+    parser.add_argument('--data_dir_template', type=str, default=None, help='one split per seed, e.g. <data>/balanced_binary/split_{seed}')
     parser.add_argument('--logs_dir', type=str, required=True, help='compressed_models/ with the checkpoints and multiseed CSVs')
     parser.add_argument('--important_features_file', type=str, required=True)
     parser.add_argument('--output_csv', type=str, required=True)
     parser.add_argument('--seeds', type=int, nargs='+', default=[0, 1, 2, 3, 4])
     parser.add_argument('--scale_factor', type=float, default=1e6)
-    parser.add_argument('--engine', type=str, default=None,
-                        help='torch.backends.quantized.engine used to convert and run the QAT models '
-                             '(default: PyTorch default; training/logging scripts never set it)')
+    parser.add_argument('--engine', type=str, default=DEFAULT_ENGINE,
+                        help='torch.backends.quantized.engine used to convert and run the QAT models (default: onednn, as in the training script)')
     args = parser.parse_args()
+    if (args.data_dir is None) == (args.data_dir_template is None):
+        parser.error('give exactly one of --data_dir and --data_dir_template')
 
-    if args.engine:
-        supported = torch.backends.quantized.supported_engines
-        if args.engine not in supported:
-            raise SystemExit(f'engine {args.engine!r} is not supported here; supported engines: {supported}')
-        torch.backends.quantized.engine = args.engine
-    engine = torch.backends.quantized.engine
+    def data_dir_of(seed):
+        return args.data_dir_template.format(seed=seed) if args.data_dir_template else args.data_dir
+
+    engine = set_quantized_engine(args.engine)
     print(f'quantized engine: {engine} (supported: {torch.backends.quantized.supported_engines})')
 
+    allow_cpu_loading()
     predictor = TabularPredictor.load(
         args.predictor_path, require_version_match=False, require_py_version_match=False)
-    n_features = pd.read_csv(os.path.join(args.data_dir, 'test.csv'), nrows=1).shape[1] - 2  # minus ID, Label
+    n_features = pd.read_csv(os.path.join(data_dir_of(args.seeds[0]), 'test.csv'), nrows=1).shape[1] - 2  # minus ID, Label
     architecture, _, input_feature_size = get_model_architecture(predictor, n_features)
 
     rows, mismatches = [], 0
-    for base, (paper_name, rescale, select) in EXPERIMENTS.items():
-        X, y = load_test_features(args.data_dir, rescale, args.important_features_file if select else None, args.scale_factor)
-        loader = DataLoader(TensorDataset(torch.tensor(X), torch.tensor(y, dtype=torch.long)), batch_size=8192)
+    for base, (paper_name, rescale, select) in CHECKED.items():
         logged = pd.read_csv(os.path.join(args.logs_dir, f'multiseed_exp{base}_results.csv')).set_index('seed')
 
         for seed in args.seeds:
+            X, y = load_test_features(data_dir_of(seed), rescale, args.important_features_file if select else None, args.scale_factor)
+            loader = DataLoader(TensorDataset(torch.tensor(X), torch.tensor(y, dtype=torch.long)), batch_size=8192)
             experiment_number = 100000 + base * 100 + seed
             for kind in ('normal', 'qat'):
                 path = os.path.join(args.logs_dir, f'{kind}_pytorch_model_exp{experiment_number}.pth')

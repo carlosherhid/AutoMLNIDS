@@ -53,6 +53,16 @@ def parse_log_file(file_path):
         if qat_sizes:
             result['qat_size_kb'] = float(qat_sizes[-1])  # last "Size (KB):" in the QAT section is post-quantization
 
+    # Added later: the same QAT weights scored as the fake-quantized model and as INT8 under each engine (None in older logs)
+    fake_accuracy = re.search(r'Accuracy of the QAT model before conversion \(fake quantization\) on the test dataset: ([0-9.]+)%', content)
+    result['qat_fake_accuracy'] = float(fake_accuracy.group(1)) if fake_accuracy else None
+    for engine in ('x86', 'onednn'):
+        engine_accuracy = re.search(rf'Accuracy of the QAT model \(INT8, {engine} engine\) on the test dataset: ([0-9.]+)%', content)
+        result[f'qat_{engine}_accuracy'] = float(engine_accuracy.group(1)) if engine_accuracy else None
+    default_engine = re.search(r'INT8 engine of the accuracy above: (\w+)', content)
+    if default_engine and result.get('qat_test_accuracy') is not None:
+        result[f'qat_{default_engine.group(1)}_accuracy'] = result['qat_test_accuracy']
+
     ag_accuracy = re.search(r'Accuracy on the test set \(Original AutoGluon Model\): ([0-9.]+)', content)
     if ag_accuracy:
         result['autogluon_accuracy'] = float(ag_accuracy.group(1)) * 100

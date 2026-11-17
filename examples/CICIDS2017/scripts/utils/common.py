@@ -23,6 +23,7 @@ import torch
 from autogluon.tabular.models.tabular_nn.torch.tabular_nn_torch import \
     TabularNeuralNetTorchModel
 from autogluon.tabular.predictor import TabularPredictor
+from utils.cpu_loading import allow_cpu_loading
 
 SAFE_CPU_PERCENTAGE = 0.7
 
@@ -32,6 +33,7 @@ def get_default_cpu_number():
 
 
 def load_predictor(directory: str):
+    allow_cpu_loading()
     # require_version_match=False / require_py_version_match=False: the
     # cluster's AutoGluon (1.6.x on Python 3.11) is newer than what predictors
     # were originally trained with (e.g. AutoGluon 1.1.1 on Python 3.10 for the

@@ -20,6 +20,8 @@ import torch.nn.utils.prune as prune
 sys.path.insert(0, os.path.dirname(__file__))
 from utils.common import patch_stale_predictor  # noqa: E402
 from utils.preprocessing import apply_preprocessing  # noqa: E402
+from utils.quantization import DEFAULT_ENGINE, fold_batchnorm_into_next_linear, set_quantized_engine  # noqa: E402
+from utils.cpu_loading import allow_cpu_loading  # noqa: E402
 
 
 def set_all_seeds(seed: int):
@@ -47,7 +49,9 @@ class Logger(object):
         self.terminal.flush()
         self.log.flush()
 
-def load_data(data_dir, modify_test=False, scale_close_to_zero=False, scale_factor=1e6):
+def load_data(data_dir, modify_test=False, scale_close_to_zero=False, scale_factor=1e6, save_dir=None):
+    """Reads train/test/validation.csv. The modified copies (_modified, _scaled) are only written when `save_dir` is given, into that
+    folder (a run's own output directory), never into `data_dir`: parallel runs share `data_dir` and would overwrite each other's files."""
     # Load original data
     train_data = pd.read_csv(os.path.join(data_dir, 'train.csv'))
     test_data = pd.read_csv(os.path.join(data_dir, 'test.csv'))
@@ -65,7 +69,9 @@ def load_data(data_dir, modify_test=False, scale_close_to_zero=False, scale_fact
         # Perform operations like modifying or scaling
         modified_dataset = dataset.copy()
         original_types = dataset.dtypes
-        modified_dataset.iloc[:, :-1] = modified_dataset.iloc[:, :-1].applymap(operation)
+        # by name, not by position: ID and Label are not features
+        feature_columns = [c for c in dataset.columns if c not in ('ID', 'Label')]
+        modified_dataset[feature_columns] = modified_dataset[feature_columns].applymap(operation)
         # Ensure the original types are preserved
         for col, dtype in original_types.items():
             modified_dataset[col] = modified_dataset[col].astype(dtype)
@@ -83,11 +89,12 @@ def load_data(data_dir, modify_test=False, scale_close_to_zero=False, scale_fact
         val_data = modify_dataset(val_data, lambda x: x * scale_factor if abs(x) < 1e-6 else x)
         modified_data_suffix += "_scaled"
 
-    # Save modified datasets to new CSV files
-    if modified_data_suffix:
-        train_data.to_csv(os.path.join(data_dir, f'train{modified_data_suffix}.csv'), index=False)
-        test_data.to_csv(os.path.join(data_dir, f'test{modified_data_suffix}.csv'), index=False)
-        val_data.to_csv(os.path.join(data_dir, f'validation{modified_data_suffix}.csv'), index=False)
+    # Save modified datasets to new CSV files, only on request and inside the run's own folder
+    if modified_data_suffix and save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+        train_data.to_csv(os.path.join(save_dir, f'train{modified_data_suffix}.csv'), index=False)
+        test_data.to_csv(os.path.join(save_dir, f'test{modified_data_suffix}.csv'), index=False)
+        val_data.to_csv(os.path.join(save_dir, f'validation{modified_data_suffix}.csv'), index=False)
 
     return train_data, test_data, val_data
 
@@ -141,7 +148,9 @@ def get_model_architecture(predictor, input_feature_size):
     return architecture, best_model, input_feature_size
 
 class AutoReplicatedNN(nn.Module):
-    def __init__(self, architecture, input_feature_size):
+    def __init__(self, architecture, input_feature_size, keep_batchnorm=False):
+        """keep_batchnorm=False replaces every BatchNorm1d of the AutoGluon network by an Identity (the replica of the paper); True keeps it, so the
+        FP32 network has the AutoGluon structure; fold_batchnorm_into_next_linear() turns it back into the BatchNorm-free form after training."""
         super(AutoReplicatedNN, self).__init__()
         self.input_feature_size = input_feature_size  # needed by restructure_pruned_model()
         layers = []
@@ -157,7 +166,10 @@ class AutoReplicatedNN(nn.Module):
             elif layer_type == nn.Dropout:
                 layers.append(nn.Dropout(p=layer_obj.p))
             elif layer_type == nn.BatchNorm1d:
-                layers.append(nn.Identity())  # Replace BatchNorm1d with Identity
+                # the width of the replica at this point, like the Linear above: the AutoGluon network can take more inputs than the data has
+                # columns (a column with few distinct values becomes several inputs), and the replica is built on the columns
+                layers.append(nn.BatchNorm1d(current_input_size, eps=layer_obj.eps, momentum=layer_obj.momentum, affine=layer_obj.affine)
+                              if keep_batchnorm else nn.Identity())
             elif layer_type == nn.Identity or layer_type == nn.Sequential:
                 layers.append(layer_obj)
             elif layer_type != nn.Softmax:  # Exclude Softmax
@@ -376,7 +388,21 @@ def main():
     parser.add_argument('--prune_model', action='store_true', help='Prune the model after training (works with --normal and/or --qat; combine with --qat to prune after QAT training as before, or with --normal alone for a pruning-only, non-quantized baseline)')
     parser.add_argument('--structured_pruning', action='store_true', help='Apply structured pruning with architectural changes')
     parser.add_argument('--prune_amount', type=float, default=0.2, help='Fraction of weights to prune when --prune_model is set (default: 0.2)')
+    parser.add_argument('--skip_autogluon_eval', action='store_true',
+                        help='do not evaluate the original AutoGluon predictor on the test split (use it when the predictor was '
+                             'trained on another split: its training rows would overlap with this test split)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for python/numpy/torch, for repeatability and multi-seed sweeps (default: 42)')
+    parser.add_argument('--qconfig', type=str, default='qnnpack', choices=['qnnpack', 'x86', 'fbgemm', 'onednn'],
+                        help='QAT configuration used to train the quantized model (default qnnpack, as in the original runs). The x86/fbgemm kernels '
+                             'of CPUs without VNNI saturate when activations use the full uint8 range of qnnpack; the x86 configuration (reduce_range) avoids it')
+    parser.add_argument('--engine', type=str, default=DEFAULT_ENGINE, choices=['onednn', 'x86', 'fbgemm', 'qnnpack'],
+                        help='torch.backends.quantized.engine that runs every INT8 number of this run (default onednn; PyTorch would otherwise pick x86, '
+                             'whose kernels saturate on CPUs without VNNI). The QAT configuration (--qconfig) is independent of it')
+    parser.add_argument('--keep_batchnorm', action='store_true',
+                        help='keep the BatchNorm layers of the AutoGluon network in the FP32 replica, fold them into the next Linear after training and '
+                             'start the QAT from those folded weights (needs --normal and --qat)')
+    parser.add_argument('--save_processed_csv', action='store_true',
+                        help='also write the modified/pruned copies of the data (train_scaled.csv, ...) into --output_dir; by default nothing is written')
     parser.add_argument('--scale_factor', type=float, default=1e6, help='Multiplicative factor applied to near-zero feature values when --scale_close_to_zero is set (default: 1e6; see scripts/scale_factor_sweep.py)')
     parser.add_argument('--preprocess', type=str, default='none', choices=['none', 'standard', 'logminmax', 'quantile'],
                         help='Alternative input transformation to compare against --scale_close_to_zero (see apply_preprocessing); fitted on the training split only')
@@ -384,10 +410,20 @@ def main():
     args = parser.parse_args()
 
     set_all_seeds(args.seed)
+    if args.keep_batchnorm and not (args.normal and args.qat):
+        parser.error('--keep_batchnorm needs --normal and --qat together (the QAT starts from the folded FP32 network)')
+    if args.keep_batchnorm and args.prune_model:
+        parser.error('--keep_batchnorm cannot be combined with --prune_model')
+    engine = set_quantized_engine(args.engine)
 
     # Setup logger
+    os.makedirs(args.output_dir, exist_ok=True)
     sys.stdout = Logger(args.output_dir, args.experiment_number)
+    print(f'torch intra-op threads: {torch.get_num_threads()} (QAT results depend on this number: keep it fixed across runs)')
     print(f'Using seed={args.seed}')
+    print(f'Quantized engine: {engine} (every INT8 accuracy of this run uses it)')
+    if args.keep_batchnorm:
+        print('Keeping the BatchNorm layers of the AutoGluon network (folded into the next Linear after the FP32 training)')
     if args.scale_close_to_zero:
         print(f'Using scale_factor={args.scale_factor}')
     if args.preprocess != 'none':
@@ -398,7 +434,8 @@ def main():
         args.data_dir,
         args.modify_test,
         args.scale_close_to_zero,
-        args.scale_factor
+        args.scale_factor,
+        save_dir=args.output_dir if args.save_processed_csv else None
     )
     train_data, test_data, val_data = apply_preprocessing(train_data, test_data, val_data, args.preprocess)
 
@@ -410,13 +447,14 @@ def main():
             val_data,
             args.important_features_file
         )
-        # Save pruned datasets to new CSV files
-        train_data.to_csv(os.path.join(args.data_dir, 'train_pruned.csv'), index=False)
-        test_data.to_csv(os.path.join(args.data_dir, 'test_pruned.csv'), index=False)
-        val_data.to_csv(os.path.join(args.data_dir, 'validation_pruned.csv'), index=False)
+        if args.save_processed_csv:
+            train_data.to_csv(os.path.join(args.output_dir, 'train_pruned.csv'), index=False)
+            test_data.to_csv(os.path.join(args.output_dir, 'test_pruned.csv'), index=False)
+            val_data.to_csv(os.path.join(args.output_dir, 'validation_pruned.csv'), index=False)
 
     train_loader, test_loader, val_loader = create_dataloaders(train_data, test_data, val_data, args.batch_size)
 
+    allow_cpu_loading()
     # Load the AutoGluon predictor
     # require_version_match=False / require_py_version_match=False: predictors
     predictor = TabularPredictor.load(
@@ -431,9 +469,18 @@ def main():
 
     if args.normal:
         # Replicate and train normal PyTorch model
-        normal_model = AutoReplicatedNN(architecture, input_feature_size).to(device)
+        normal_model = AutoReplicatedNN(architecture, input_feature_size, keep_batchnorm=args.keep_batchnorm).to(device)
         print("\nTraining Normal PyTorch Model:")
         normal_model = train_pytorch_model(normal_model, train_loader, val_loader, args.epochs, device, not args.disable_early_stopping, not args.disable_lr_scheduler)
+        if args.keep_batchnorm:
+            accuracy_with_batchnorm = evaluate_model(normal_model, test_loader, device)
+            folded_layers = fold_batchnorm_into_next_linear(normal_model)
+            accuracy_folded = evaluate_model(normal_model, test_loader, device)
+            print(f'Folded {folded_layers} BatchNorm layers into the next Linear: accuracy {accuracy_with_batchnorm * 100:.2f}% before, {accuracy_folded * 100:.2f}% after')
+            # folding multiplies the columns of each Linear by gamma / sqrt(var + eps): a feature with a tiny variance gets a huge weight, which the
+            # per-tensor int8 weights of the converted model then represent coarsely for all the other inputs
+            weight_ranges = [(m.weight.abs().max() / m.weight.abs().median().clamp_min(1e-12)).item() for m in normal_model.modules() if isinstance(m, nn.Linear)]
+            print(f'Folded weights, |W| max / median per Linear: first layer {weight_ranges[0]:.1f}, largest {max(weight_ranges):.1f}')
 
         if args.prune_model and not args.qat:
             # Pruning-only baseline (no quantization at all): prune the trained FP32
@@ -454,9 +501,14 @@ def main():
     if args.qat:
         # Apply QAT and train QAT PyTorch model
         qat_model = AutoReplicatedNN(architecture, input_feature_size).to(device)
+        if args.keep_batchnorm:
+            # the folded FP32 network has the same layers as the BatchNorm-free replica (an Identity where each BatchNorm was)
+            qat_model.load_state_dict(normal_model.state_dict())
+            print('QAT starts from the folded FP32 weights (--keep_batchnorm)')
 
         qat_model = QATWrapper(qat_model).to(device)
-        qat_model.qconfig = torch.quantization.get_default_qat_qconfig('qnnpack')
+        qat_model.qconfig = torch.quantization.get_default_qat_qconfig(args.qconfig)
+        print(f'QAT configuration: {args.qconfig}')
         prepare_qat(qat_model, inplace=True)
 
         print("\nTraining QAT PyTorch Model:")
@@ -480,11 +532,19 @@ def main():
 
             # Re-evaluate after pruning
             qat_model.model = pruned_model  # Update the QAT wrapper's model
-            pruned_accuracy = evaluate_model(qat_model, test_loader, device)
+            # on a copy: the observers of a QAT model keep updating in eval mode, so scoring the test set with the model itself would
+            # change the quantization parameters that convert() uses afterwards
+            pruned_accuracy = evaluate_model(copy.deepcopy(qat_model), test_loader, device)
             print(f'Accuracy of the pruned QAT model on the test dataset: {pruned_accuracy * 100:.2f}%')
 
         qat_model.eval()
         qat_model = qat_model.cpu()  # Move to CPU for quantization
+        # The same trained weights are scored three ways: the fake-quantized model (what QAT optimized), and the INT8 model under the default engine
+        # and under the other engines of this PyTorch build. The INT8 kernels of some CPUs saturate (activations that use the full uint8 range of the
+        # qnnpack configuration overflow the 16-bit intermediate sums of the x86/fbgemm AVX2 kernels), which turns a good model into ~50 % accuracy.
+        fake_quantized_model = copy.deepcopy(qat_model)
+        fake_accuracy = evaluate_model(fake_quantized_model, test_loader, torch.device("cpu"))
+        print(f'Accuracy of the QAT model before conversion (fake quantization) on the test dataset: {fake_accuracy * 100:.2f}%')
         qat_model = convert(qat_model)
         save_model(qat_model, args.output_dir, "qat_pytorch_model", args.experiment_number)
 
@@ -493,6 +553,15 @@ def main():
         print_detailed_metrics('QAT', evaluate_model_detailed(qat_model, test_loader, torch.device("cpu")))
         print_size_of_model(qat_model)
 
+        default_engine = torch.backends.quantized.engine
+        print(f'INT8 engine of the accuracy above: {default_engine}')
+        for engine in ('x86', 'onednn'):
+            if engine != default_engine and engine in torch.backends.quantized.supported_engines:
+                torch.backends.quantized.engine = engine
+                other_accuracy = evaluate_model(convert(copy.deepcopy(fake_quantized_model)), test_loader, torch.device("cpu"))
+                print(f'Accuracy of the QAT model (INT8, {engine} engine) on the test dataset: {other_accuracy * 100:.2f}%')
+        torch.backends.quantized.engine = default_engine
+
         print("Weights after quantization:")
         # Print weights from the first Linear layer
         for layer in qat_model.model.main_block:
@@ -500,17 +569,20 @@ def main():
                 print(torch.int_repr(layer.weight))
                 break
 
-    try:
-        if args.modify_test or args.scale_close_to_zero or args.prune_features:
-            print("Evaluating AutoGluon model on the modified test dataset.")
-            ag_test_data = test_data.drop(columns=['Label'])
-            ag_labels = test_data['Label']
-            original_ag_model_accuracy = predictor.evaluate(pd.concat([ag_test_data, ag_labels], axis=1))['accuracy']
-        else:
-            original_ag_model_accuracy = predictor.evaluate(pd.read_csv(os.path.join(args.data_dir, 'test.csv')))['accuracy']
-        print(f'Accuracy on the test set (Original AutoGluon Model): {original_ag_model_accuracy:.4f}')
-    except Exception as e:
-        print(f'WARNING: skipping original-AutoGluon-model comparison, predictor.evaluate() failed: {e!r}')
+    if args.skip_autogluon_eval:
+        print('Skipping the evaluation of the original AutoGluon model (--skip_autogluon_eval).')
+    else:
+        try:
+            if args.modify_test or args.scale_close_to_zero or args.prune_features:
+                print("Evaluating AutoGluon model on the modified test dataset.")
+                ag_test_data = test_data.drop(columns=['Label'])
+                ag_labels = test_data['Label']
+                original_ag_model_accuracy = predictor.evaluate(pd.concat([ag_test_data, ag_labels], axis=1))['accuracy']
+            else:
+                original_ag_model_accuracy = predictor.evaluate(pd.read_csv(os.path.join(args.data_dir, 'test.csv')))['accuracy']
+            print(f'Accuracy on the test set (Original AutoGluon Model): {original_ag_model_accuracy:.4f}')
+        except Exception as e:
+            print(f'WARNING: skipping original-AutoGluon-model comparison, predictor.evaluate() failed: {e!r}')
 
     # End the timer and print the total execution time
     end_time = time.time()

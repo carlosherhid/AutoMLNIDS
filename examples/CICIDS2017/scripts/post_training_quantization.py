@@ -6,14 +6,18 @@ differs: a model is trained in FP32 as usual, then quantized *after* training (n
 fake-quantization during training), using a handful of calibration batches to
 estimate activation ranges.
 
+The input transformation of the experiment whose FP32 network is quantized must be given here too (--scale_close_to_zero for
+Experiment 4, --preprocess standard / logminmax / quantile for Experiments 6-8): the calibration and the test then see exactly
+the data the network was trained on, so the PTQ and QAT numbers of an experiment differ only in how the network is quantized.
+
 Usage:
     python scripts/post_training_quantization.py --predictor_path <predictor_dir> \
         --data_dir <data_dir> --output_dir <output_dir> \
         --experiment_number 6 --epochs 100
-    # Or, to skip retraining and quantize an already-trained FP32 checkpoint:
+    # Or, to skip retraining and quantize an already-trained FP32 checkpoint (here that of Experiment 6, standardized input):
     python scripts/post_training_quantization.py --predictor_path <predictor_dir> \
         --data_dir <data_dir> --output_dir <output_dir> \
-        --experiment_number 6 --normal_model_path <normal_checkpoint>
+        --experiment_number 6 --normal_model_path <normal_checkpoint> --preprocess standard
 """
 import argparse
 import os
@@ -30,6 +34,9 @@ from autogluon_to_pytorch_qat import (
     get_model_architecture, load_data, print_size_of_model, set_all_seeds,
     train_pytorch_model,
 )
+from utils.quantization import DEFAULT_ENGINE, set_quantized_engine
+from utils.cpu_loading import allow_cpu_loading
+from utils.preprocessing import apply_preprocessing
 
 
 def calibrate(model, calibration_loader, device, n_batches=20):
@@ -52,21 +59,30 @@ def main():
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--scale_close_to_zero', action='store_true')
     parser.add_argument('--scale_factor', type=float, default=1e6)
+    parser.add_argument('--preprocess', type=str, default='none', choices=['none', 'standard', 'logminmax', 'quantile'],
+                        help='Alternative input transformation of Experiments 6-8 (as in autogluon_to_pytorch_qat.py); fitted on the training split only')
     parser.add_argument('--calibration_batches', type=int, default=20,
                          help='Number of training batches used to calibrate activation ranges')
+    parser.add_argument('--engine', type=str, default=DEFAULT_ENGINE, choices=['onednn', 'x86', 'fbgemm', 'qnnpack'],
+                         help='torch.backends.quantized.engine that runs the INT8 model (default onednn; PyTorch would otherwise pick x86)')
     parser.add_argument('--normal_model_path', type=str, default=None,
                          help='Path to an already-trained FP32 state_dict (from autogluon_to_pytorch_qat.py '
                               '--normal) to reuse instead of retraining')
     args = parser.parse_args()
 
     set_all_seeds(args.seed)
+    print(f'Quantized engine: {set_quantized_engine(args.engine)}')
     device = torch.device('cpu')  # PTQ (static) quantized models run on CPU in PyTorch
+    print(f'Input transformation: rescaling={"x" + format(args.scale_factor, "g") if args.scale_close_to_zero else "no"}, preprocess={args.preprocess}')
 
     train_data, test_data, val_data = load_data(
         args.data_dir, modify_test=False,
         scale_close_to_zero=args.scale_close_to_zero, scale_factor=args.scale_factor)
+    # same order as autogluon_to_pytorch_qat.py: rescaling first, then the alternative representation (statistics from the training split)
+    train_data, test_data, val_data = apply_preprocessing(train_data, test_data, val_data, args.preprocess)
     train_loader, test_loader, val_loader = create_dataloaders(train_data, test_data, val_data, args.batch_size)
 
+    allow_cpu_loading()
     # require_version_match=False / require_py_version_match=False: predictor
     # may have been trained on an older AutoGluon/Python than what's installed
     # - see autogluon_to_pytorch_qat.py.

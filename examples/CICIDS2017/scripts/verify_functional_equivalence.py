@@ -26,6 +26,7 @@ from autogluon_to_pytorch_qat import AutoReplicatedNN, get_model_architecture
 
 sys.path.insert(0, os.path.dirname(__file__))
 from utils.common import patch_stale_predictor  # noqa: E402
+from utils.cpu_loading import allow_cpu_loading  # noqa: E402
 
 
 def main():
@@ -39,6 +40,7 @@ def main():
                          help='Optional path to save per-sample comparison rows')
     args = parser.parse_args()
 
+    allow_cpu_loading()
     # require_version_match=False / require_py_version_match=False: predictor
     # may have been trained on an older AutoGluon/Python than what's installed
     # - see autogluon_to_pytorch_qat.py.

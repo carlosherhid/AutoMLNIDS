@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=automl-nids-setup
-#SBATCH --partition=gpu
+#SBATCH --partition=cpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
-#SBATCH --gpus=1
-#SBATCH --gres=gpu:1
-#SBATCH --mem=16G
-#SBATCH --time=01:00:00
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=8G
+#SBATCH --time=01:30:00
 #SBATCH --output=automl-nids-setup-%j.out
 #SBATCH --error=automl-nids-setup-%j.err
 
@@ -17,6 +15,7 @@
 # install is heavy (many GB of transitive deps) and we submit many small jobs
 # (multi-seed reruns, sweeps...), not one long one.
 #
+# This job only installs packages, so it runs on a CPU partition and reserves no GPU (the GPU is checked by the jobs that use it).
 # Run once: sbatch cluster/setup_env.sbatch
 # Re-run any time you change requirements.txt (it just reinstalls into the
 # same venv).
@@ -45,17 +44,25 @@ fi
 echo "=== FINDING SYSTEM PYTHON (3.11) ==="
 # requirements.txt pins the software stack of the paper, which ran on Python 3.11.
 PYBIN=""
-for p in /usr/local/bin/python3.11 /usr/bin/python3.11 /bin/python3.11 python3.11; do
-  if command -v "$p" >/dev/null 2>&1; then
+# PYTHON311 (optional) is the path of a Python 3.11 that every node can run, e.g. one installed on the shared file system
+# (see "Python for the CPU nodes" in cluster/README.md); it is tried first.
+for p in "${PYTHON311:-}" /usr/local/bin/python3.11 /usr/bin/python3.11 /bin/python3.11 python3.11; do
+  if [[ -n "$p" ]] && command -v "$p" >/dev/null 2>&1; then
     PYBIN="$(command -v "$p")"
     break
   fi
 done
 
+if [[ -z "$PYBIN" && -x "$VENV_PATH/bin/python" ]]; then
+  # never rebuild a working venv with a different Python just because this node lacks python3.11
+  echo "WARNING: Python 3.11 not found on this node; keeping the existing venv at $VENV_PATH and reinstalling the requirements into it." >&2
+  PYBIN="$VENV_PATH/bin/python"
+fi
+
 if [[ -z "$PYBIN" ]]; then
-  echo "WARNING: Python 3.11 (the version of the paper's software stack) not found on this node;" >&2
-  echo "falling back to the system's python3. Check whether 'module load python/3.11' (or similar) is available." >&2
-  PYBIN="$(command -v python3 || true)"
+  # the pinned stack (torch 2.4.1...) has no wheels for newer Pythons: do not build an environment with another version
+  echo "ERROR: Python 3.11 (the version of the paper's software stack) not found on $(hostname). Set PYTHON311=/path/to/python3.11 (a Python every node can run)." >&2
+  exit 1
 fi
 
 if [[ -z "$PYBIN" ]]; then
@@ -64,6 +71,13 @@ if [[ -z "$PYBIN" ]]; then
 fi
 echo "Using PYBIN=$PYBIN"
 "$PYBIN" --version
+
+if [[ -e "$VENV_PATH" && ! -x "$VENV_PATH/bin/python" ]]; then
+  # a venv points at the interpreter it was built with; on a node that lacks it the link is broken, and recreating the venv here
+  # with another Python would damage it
+  echo "ERROR: $VENV_PATH exists but its Python is not usable on $(hostname) (see $VENV_PATH/pyvenv.cfg). Run this job on a node that has that interpreter. The venv was not touched." >&2
+  exit 1
+fi
 
 echo "=== CREATING PERSISTENT VENV (rebuilt if missing or on the wrong Python version) ==="
 NEED_NEW_VENV=1
@@ -86,26 +100,20 @@ python --version
 pip install --upgrade pip setuptools wheel
 pip install -r "$PROJECT_DIR/requirements.txt"
 
-echo "=== APPLYING AUTOGLUON auto_trainer.py PATCH ==="
-# Without this, automl_model_search.py crashes with
-# "TypeError: unhashable type: 'slice'" the moment fit() logs hyperparameters
-# (NN_TORCH's value is a dict, not a list, but the installed file always does
-# hyperparameters[k][:3]). Confirmed byte-identical to our patched version except
-# for that one line, on AutoGluon 0.8.2, 1.0.0 and 1.6.2 - see
-# examples/CICIDS2017/scripts/patches/README.md. Located dynamically (not a
-# hardcoded lib/pythonX.Y/ path) so this keeps working whichever Python version
-# ended up being used above.
-PATCH_SRC="$PROJECT_DIR/code/examples/CICIDS2017/scripts/patches/autogluon_auto_trainer.py"
-if [[ -f "$PATCH_SRC" ]]; then
-  TRAINER_FILE="$(python -c 'import autogluon.tabular.trainer.auto_trainer as m; print(m.__file__)' 2>/dev/null || echo "")"
-  if [[ -n "$TRAINER_FILE" && -f "$TRAINER_FILE" ]]; then
-    cp "$PATCH_SRC" "$TRAINER_FILE"
-    echo "Patched $TRAINER_FILE"
-  else
-    echo "WARNING: could not locate the installed auto_trainer.py to patch - automl_model_search.py may crash with 'TypeError: unhashable type: slice'. Apply the patch manually (see examples/CICIDS2017/scripts/patches/README.md)." >&2
-  fi
+echo "=== FIXING AUTOGLUON auto_trainer.py (one expression) ==="
+# AutoGluon 1.6.2 already guards the expression that logs hyperparameters[k][:3] (NN_TORCH's value is a dict, not a list), so on the
+# pinned version this step prints "already patched" and changes nothing. It stays as a safety net for AutoGluon versions without that
+# guard, where automl_model_search.py would stop with "TypeError: unhashable type: 'slice'" the moment fit() logs the hyperparameters.
+# The fix edits only that expression (patches/apply_autogluon_patch.py), because the whole file differs between AutoGluon versions: a
+# copy taken from another version makes the import of AutoGluon fail. It is applied on a pristine copy of the package, so a file left
+# by an earlier patch is discarded.
+AG_VERSION="$(python -c 'import importlib.metadata as m; print(m.version("autogluon.tabular"))')"
+pip install --quiet --force-reinstall --no-deps "autogluon.tabular==$AG_VERSION"
+PATCH_SCRIPT="$PROJECT_DIR/code/examples/CICIDS2017/scripts/patches/apply_autogluon_patch.py"
+if [[ -f "$PATCH_SCRIPT" ]]; then
+  python "$PATCH_SCRIPT"
 else
-  echo "WARNING: patch source $PATCH_SRC not found (code/ not uploaded?) - skipping." >&2
+  echo "WARNING: $PATCH_SCRIPT not found (code/ not uploaded?) - automl_model_search.py may crash with 'TypeError: unhashable type: slice'." >&2
 fi
 
 echo "=== GPU CHECK ==="
@@ -118,7 +126,7 @@ print("CUDA available:", torch.cuda.is_available())
 if torch.cuda.is_available():
     print("Device:", torch.cuda.get_device_name(0))
 else:
-    print("WARNING: CUDA not available to PyTorch in this venv - training will fall back to CPU.")
+    print("CUDA not visible in this job (expected: it runs on a CPU partition without a GPU). The jobs that use the GPU print the device they get.")
 PY
 
 python - <<'PY'
@@ -126,7 +134,8 @@ try:
     from autogluon.tabular import TabularPredictor
     print("AutoGluon import OK")
 except Exception as e:
-    print(f"WARNING: AutoGluon import failed: {e}")
+    print(f"ERROR: AutoGluon import failed: {e}")
+    raise SystemExit(1)
 PY
 
 deactivate || true

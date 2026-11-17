@@ -9,6 +9,7 @@ from sklearn.metrics import get_scorer_names
 from autogluon.tabular import TabularPredictor
 from utils.ranking import get_all_ranking_algorithms, get_ranking_algorithm
 from utils.model import test_model_on_subset
+from utils.cpu_loading import allow_cpu_loading
 
 def create_dir(directory, overwrite=False):
     if not os.path.exists(directory):
@@ -52,6 +53,7 @@ def rank(predictor_directory: str, dataset_directory: str, algorithm: str, metri
     set_seed()
 
     logger.info('Loading Model')
+    allow_cpu_loading()
     # require_version_match=False / require_py_version_match=False: predictor
     # may have been trained on an older AutoGluon/Python than what's installed
     # - see autogluon_to_pytorch_qat.py.
@@ -74,6 +76,7 @@ def rank(predictor_directory: str, dataset_directory: str, algorithm: str, metri
 
     feature_importances = pd.DataFrame(columns=X.columns.values, index=pd.Index([], name='ID'))
     model_scores: pd.DataFrame = None
+    order = []   # one row per step: the feature removed (sbe) or added (sfs) and how many features the subset has afterwards
 
     if is_sbe:
         test_scores = test_model_on_subset(predictor, X, y, best_model, subset=current_features)
@@ -98,6 +101,7 @@ def rank(predictor_directory: str, dataset_directory: str, algorithm: str, metri
             worst_or_best = draw_best(scores, top=False)
             current_features.remove(worst_or_best)
             logger.info(f'Removing {worst_or_best=} from current features')
+        order.append({'step': len(order) + 1, 'feature': worst_or_best, 'features_after': len(current_features)})
 
         test_scores = test_model_on_subset(predictor, X, y, best_model, subset=current_features)
         logger.info(f'Testing {len(current_features)=} -> {test_scores[metric]=}')
@@ -111,6 +115,7 @@ def rank(predictor_directory: str, dataset_directory: str, algorithm: str, metri
 
     feature_importances.to_csv(os.path.join(store_path, f'feature_importance.csv'))
     model_scores.to_csv(os.path.join(store_path, f'leaderboard.csv'))
+    pd.DataFrame(order).to_csv(os.path.join(store_path, 'elimination_order.csv'), index=False)
 
 @click.command(help='Rank the features using one of the greedy algorithms and strategies', context_settings={'show_default': True})
 @click.option('--predictor-directory', type=str, required=True, help='working directory with the automl chosen model')
