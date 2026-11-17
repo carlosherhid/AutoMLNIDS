@@ -54,6 +54,17 @@ AutoGluon needs a small patch to run the hyperparameter search, see
 [`examples/CICIDS2017/scripts/patches/README.md`](examples/CICIDS2017/scripts/patches/README.md). To run on a SLURM GPU
 cluster, see [`cluster/README.md`](cluster/README.md).
 
+## Tests
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+About 30 seconds on a CPU, with small synthetic data: nothing is trained and no GPU, predictor or real dataset is needed (the packages of
+`requirements.txt` are). They check that the data splits share no rows, that the Min-Max scaling is fitted on the training part and that the same files
+and seed give the same splits, the result tables (paired tests, false-positive rate of the baselines), the INT8 exporter and its guard against
+networks the firmware cannot run, and the definitions of the experiments.
+
 ## Experiments of the paper
 
 Every dataset is run with the same experiments, numbered as in the paper (`run_multiseed.py --experiment N`; the
