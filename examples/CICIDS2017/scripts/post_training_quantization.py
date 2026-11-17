@@ -21,7 +21,6 @@ Usage:
 """
 import argparse
 import os
-import sys
 
 import torch
 import torch.quantization as tq

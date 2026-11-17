@@ -88,7 +88,7 @@ def rank(predictor_directory: str, dataset_directory: str, algorithm: str, metri
 
         scores = algorithm_func(X, y, current_features,
                                 predictor=predictor, model_name=best_model_name, model=best_model,
-                                n_cpus=cpus, target_metric=metric, time_limit=time_limit)
+                                cpus=cpus, eval_metric=metric, time_limit=time_limit)
 
         feature_importances.loc[len(scores)] = scores
 

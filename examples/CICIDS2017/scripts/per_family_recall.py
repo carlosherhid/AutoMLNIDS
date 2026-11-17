@@ -61,7 +61,7 @@ def load_test_inputs(data_dir, recipe, scale_factor, features_file):
     elif method != 'none':
         _, test, _ = apply_preprocessing(test, test, test, method)
     if recipe['select']:
-        keep = set(pd.read_csv(features_file, header=None).squeeze().tolist())
+        keep = set(pd.read_csv(features_file, header=None).iloc[:, 0].tolist())
         test[[c for c in columns if c not in keep]] = 0
 
     labels = test['Label'].to_numpy()

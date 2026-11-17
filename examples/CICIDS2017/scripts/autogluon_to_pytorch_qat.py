@@ -100,7 +100,7 @@ def load_data(data_dir, modify_test=False, scale_close_to_zero=False, scale_fact
 
 def prune_features(train_data, test_data, val_data, important_features_file):
     # Read the important features from the file, assuming no header
-    pruned_features = pd.read_csv(important_features_file, header=None).squeeze().tolist()
+    pruned_features = pd.read_csv(important_features_file, header=None).iloc[:, 0].tolist()   # .squeeze() would return a scalar for a single feature
     important_features = ['ID'] + pruned_features + ['Label']
 
     # Set unimportant features to zero instead of removing them
@@ -152,7 +152,7 @@ class AutoReplicatedNN(nn.Module):
         """keep_batchnorm=False replaces every BatchNorm1d of the AutoGluon network by an Identity (the replica of the paper); True keeps it, so the
         FP32 network has the AutoGluon structure; fold_batchnorm_into_next_linear() turns it back into the BatchNorm-free form after training."""
         super(AutoReplicatedNN, self).__init__()
-        self.input_feature_size = input_feature_size  # needed by restructure_pruned_model()
+        self.input_feature_size = input_feature_size
         layers = []
         current_input_size = input_feature_size
         for layer_type, layer_obj in architecture:
@@ -336,31 +336,6 @@ def prune_model(model, amount=0.2):
             prune.remove(layer, 'weight')
     return model
 
-def restructure_pruned_model(original_model):
-    """
-    Rebuilds the model architecture by removing neurons or channels that have been pruned away.
-    """
-    pruned_layers = []
-
-    for layer in original_model.main_block:
-        if isinstance(layer, nn.Linear):
-            # Check which neurons (input/output channels) have all weights set to zero
-            weight_mask = layer.weight.abs().sum(dim=1) != 0
-            bias_mask = layer.bias.abs() != 0
-
-            # Create a new linear layer with the reduced number of neurons
-            new_layer = nn.Linear(int(weight_mask.sum()), layer.out_features)
-            new_layer.weight = torch.nn.Parameter(layer.weight[weight_mask].clone())
-            new_layer.bias = torch.nn.Parameter(layer.bias[bias_mask].clone())
-
-            pruned_layers.append(new_layer)
-        else:
-            pruned_layers.append(layer)
-
-    # Build a new model with the pruned layers
-    new_model = AutoReplicatedNN(pruned_layers, original_model.input_feature_size)
-    return new_model
-
 def save_model(model, output_dir, model_name, experiment_number):
     model_path = os.path.join(output_dir, f"{model_name}_exp{experiment_number}.pth")
     torch.save(model.state_dict(), model_path)
@@ -386,7 +361,6 @@ def main():
     parser.add_argument('--prune_features', action='store_true', help='Prune features based on importance')
     parser.add_argument('--important_features_file', type=str, help='File containing important features to keep after pruning')
     parser.add_argument('--prune_model', action='store_true', help='Prune the model after training (works with --normal and/or --qat; combine with --qat to prune after QAT training as before, or with --normal alone for a pruning-only, non-quantized baseline)')
-    parser.add_argument('--structured_pruning', action='store_true', help='Apply structured pruning with architectural changes')
     parser.add_argument('--prune_amount', type=float, default=0.2, help='Fraction of weights to prune when --prune_model is set (default: 0.2)')
     parser.add_argument('--skip_autogluon_eval', action='store_true',
                         help='do not evaluate the original AutoGluon predictor on the test split (use it when the predictor was '
@@ -488,8 +462,6 @@ def main():
             print("\nModel size before pruning (FP32, no QAT):")
             print_size_of_model(normal_model)
             normal_model = prune_model(normal_model, amount=args.prune_amount)
-            if args.structured_pruning:
-                normal_model = restructure_pruned_model(normal_model)
             print("\nModel size after pruning (FP32, no QAT):")
 
         save_model(normal_model, args.output_dir, "normal_pytorch_model", args.experiment_number)
@@ -520,15 +492,9 @@ def main():
 
         if args.prune_model:
             # Prune the model after QAT training but before quantization
-            pruned_model = prune_model(qat_model.model)
+            pruned_model = prune_model(qat_model.model, amount=args.prune_amount)
             print("\nModel size after pruning but before quantization:")
             print_size_of_model(pruned_model)
-
-            # Rebuild model to reflect pruned structure
-            if args.structured_pruning:
-                pruned_model = restructure_pruned_model(pruned_model)
-                print("\nRebuilt Model size after pruning:")
-                print_size_of_model(pruned_model)
 
             # Re-evaluate after pruning
             qat_model.model = pruned_model  # Update the QAT wrapper's model

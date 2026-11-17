@@ -39,7 +39,7 @@ def load_test_features(data_dir, rescale, selected_features_file, scale_factor):
     if rescale:
         features = features.where(features.abs() >= 1e-6, features * scale_factor)
     if selected_features_file:
-        keep = pd.read_csv(selected_features_file, header=None).squeeze().tolist()
+        keep = pd.read_csv(selected_features_file, header=None).iloc[:, 0].tolist()
         features = features.copy()
         features[[c for c in features.columns if c not in keep]] = 0
     return features.values.astype(np.float32), labels

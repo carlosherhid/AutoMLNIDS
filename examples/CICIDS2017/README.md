@@ -3,7 +3,7 @@
 Trains a binary (benign/malicious) intrusion-detection model, selects an architecture with AutoGluon, replicates it in
 PyTorch and applies Quantization-Aware Training (QAT) with a near-zero feature rescaling. The folder is named after
 CICIDS2017, the first dataset; the same scripts, with the same experiments, run on `CICIDS2017_improved` (the corrected
-release), UNSW-NB15, TON_IoT and CICIoT2023 (see [`../CICIoT2023/README.md`](../CICIoT2023/README.md)).
+release), UNSW-NB15 and TON_IoT; CICIoT2023 is supported too (see [`../CICIoT2023/README.md`](../CICIoT2023/README.md)).
 
 ## Pipeline
 
@@ -21,7 +21,7 @@ scripts/autogluon_to_pytorch_qat.py   replicates the AutoGluon architecture in P
 
 The commands of the experiments of the paper are in [`docs/EXPERIMENTS_LOG.md`](docs/EXPERIMENTS_LOG.md).
 `autogluon_to_pytorch_qat.py` also contains options from an exploratory weight-pruning stage
-(`--prune_model`, `--structured_pruning`, `--prune_amount`) that the paper does not use.
+(`--prune_model`, `--prune_amount`: unstructured magnitude pruning) that the paper does not use.
 
 ## Analysis scripts
 
