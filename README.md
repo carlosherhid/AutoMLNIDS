@@ -3,10 +3,10 @@
 Code and firmware accompanying the paper *Quantization-Aware Training of AutoML-Optimized Deep
 Learning Models for Edge Network Intrusion Detection* (anonymized for review).
 
-The pipeline takes the neural network that AutoGluon selects for binary intrusion detection, replicates its architecture
-in PyTorch, trains it with Quantization-Aware Training (QAT) after a preprocessing step aimed at the near-zero feature
-values that collapse under INT8 quantization, and exports the result as an integer-only model that runs on an M5Stack
-Basic (ESP32). It is run on four datasets with the same procedure: the corrected release of
+The pipeline takes the neural network that AutoGluon selects for binary intrusion detection, rebuilds its topology in
+PyTorch, trains it there with Quantization-Aware Training (QAT) after a preprocessing step aimed at the near-zero feature
+values that collapse under INT8 quantization, and exports the result as an int8 model (integer matrix products with int32
+accumulation and one float32 requantization multiplier per layer) that runs on an M5Stack Basic (ESP32). It is run on four datasets with the same procedure: the corrected release of
 [CICIDS2017](https://www.unb.ca/cic/datasets/ids-2017.html) (`CICIDS2017_improved`),
 [UNSW-NB15](https://research.unsw.edu.au/projects/unsw-nb15-dataset), TON_IoT (network data) and
 [CICIoT2023](https://www.unb.ca/cic/datasets/iotdataset-2023.html).
@@ -14,9 +14,10 @@ Basic (ESP32). It is run on four datasets with the same procedure: the corrected
 ## Pipeline
 
 1. **AutoML baseline**: AutoGluon searches architecture and hyperparameters (`automl_model_search.py`).
-2. **Cross-framework translation**: the selected architecture is replicated in PyTorch (BatchNorm replaced by
-   Identity, matching dropout and activations) so that PyTorch's QAT tooling can be used
-   (`autogluon_to_pytorch_qat.py`; `verify_functional_equivalence.py` compares both models sample by sample).
+2. **Cross-framework translation**: the topology selected by AutoGluon (layer sizes, activations, dropout; BatchNorm
+   replaced by Identity unless `--keep_batchnorm`) is rebuilt in PyTorch and trained there, the weights of the AutoGluon
+   network are not transferred, so that PyTorch's QAT tooling can be used (`autogluon_to_pytorch_qat.py`;
+   `verify_functional_equivalence.py` compares the predictions of the two models on the test set).
 3. **QAT** with `QuantStub`/`DeQuantStub` and the qnnpack configuration.
 4. **Near-zero feature rescaling** (`--scale_close_to_zero`, factor set by `--scale_factor`).
 5. **Feature selection** by sequential backward elimination (`feature_ranking.py`, `--prune_features`).

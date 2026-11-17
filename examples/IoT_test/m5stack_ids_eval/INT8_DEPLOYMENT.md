@@ -22,7 +22,13 @@ network. Results with this checkpoint (rescaled CICIDS2017 test set, 166,967 row
 | QAT, PyTorch quantized (onednn) | 99.26% | 99.23% | 0.71% |
 | QAT, integer arithmetic of the firmware | 99.26% | 99.23% | 0.71% |
 
-The integer emulation and PyTorch disagree on 3 of 166,967 rows.
+The integer emulation and PyTorch disagree on 3 of 166,967 rows. The differences are rounding effects, mainly of the bias: PyTorch's `onednn` engine adds
+it in float, while the firmware stores it as an int32 rounded to the accumulator scale, so a few rows can differ by one output step; the effect
+grows with the depth of the network.
+
+Note: these figures belong to the checkpoint included in this folder (CICIDS2017, 61 inputs), which was trained with an earlier version of the data
+pipeline. The exporter, the firmware and the checks do not depend on the dataset: with another checkpoint, `export_qat_int8.py --check_csv` prints
+its own figures.
 
 ## Run it
 

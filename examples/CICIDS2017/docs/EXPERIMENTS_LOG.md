@@ -111,7 +111,7 @@ python scripts/run_analyses.py --data_root <data>/balanced_binary --stages sweep
 | stage | analysis | script |
 |---|---|---|
 | `ptq` | static post-training quantization of the FP32 model of each seed, for the experiments of `--ptq_experiments` (default Experiment 1; `--ptq_experiments 3 4 6 7 8` quantizes each one with the input transformation it was trained with) | `post_training_quantization.py` |
-| `equivalence` | agreement between the AutoGluon model and the FP32 replica (Experiment 4, seed 0) | `verify_functional_equivalence.py` |
+| `equivalence` | prediction agreement between the AutoGluon model and the FP32 replica of Experiment 3 (the same Min-Max input), seed 0 | `verify_functional_equivalence.py` |
 | `noise` | Experiment 4, seed 0, under Gaussian input noise | `robustness_noise_eval.py` |
 | `resolution` | resolution that survives 8-bit input quantization, per input representation | `input_resolution_diagnostic.py` |
 | `tradeoff` | size and single-thread latency of the seed-0 model of Experiments 1-5 | `build_tradeoff_table.py` |

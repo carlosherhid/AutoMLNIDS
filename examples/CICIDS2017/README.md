@@ -31,7 +31,7 @@ The commands of the experiments of the paper are in [`docs/EXPERIMENTS_LOG.md`](
 | `run_analyses.py` | runs the analyses below for one dataset with the arguments that tie them to the multi-seed runs |
 | `evaluate_checkpoint_metrics.py` | precision, recall, FPR and F1 of the saved checkpoints under other quantized engines |
 | `build_metrics_table.py` | detection-metric tables (recall, FPR, F1 of the FP32 and INT8 models per experiment, projected precision, classical baselines) for any number of datasets, from the per-seed CSV of each experiment |
-| `verify_functional_equivalence.py` | agreement between the AutoGluon model and the PyTorch replica |
+| `verify_functional_equivalence.py` | prediction agreement between the AutoGluon model and the FP32 PyTorch replica (a separately trained network) on the test set |
 | `build_tradeoff_table.py` | accuracy / F1 / size / latency / sparsity table |
 | `baselines_classical_ml.py` | Random Forest, Logistic Regression and XGBoost baselines |
 | `post_training_quantization.py` | static post-training quantization baseline |

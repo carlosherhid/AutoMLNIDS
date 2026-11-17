@@ -34,12 +34,11 @@ def get_default_cpu_number():
 
 def load_predictor(directory: str):
     allow_cpu_loading()
-    # require_version_match=False / require_py_version_match=False: the
-    # cluster's AutoGluon (1.6.x on Python 3.11) is newer than what predictors
-    # were originally trained with (e.g. AutoGluon 1.1.1 on Python 3.10 for the
-    # CICIDS2017 predictor) - AutoGluon refuses to load across either gap by
-    # default. Same-major-line upgrades (1.x -> 1.6.x) have been fine in
-    # practice here; a 0.8.x predictor would be a different, riskier case.
+    # require_version_match=False / require_py_version_match=False: a predictor
+    # saved by an older AutoGluon or Python (e.g. 1.1.x on Python 3.10) is loaded
+    # by the cluster's AutoGluon (1.6.x on Python 3.11), which refuses to load
+    # across either gap by default. Same-major-line upgrades (1.x -> 1.6.x) have
+    # been fine in practice here; a 0.8.x predictor would be a different, riskier case.
     predictor = TabularPredictor.load(
         directory, verbosity=0, require_version_match=False, require_py_version_match=False)
     assert isinstance(predictor, TabularPredictor)
@@ -49,8 +48,7 @@ def load_predictor(directory: str):
 
 
 def patch_stale_predictor(predictor):
-    """Predictors pickled under an older AutoGluon (e.g. 1.1.1, CICIDS2017's
-    original predictor) can be missing attributes that later AutoGluon
+    """Predictors pickled under an older AutoGluon (e.g. 1.1.1) can be missing attributes that later AutoGluon
     versions' code unconditionally reads on the (feature generator / model)
     objects restored from that pickle - unpickling restores __dict__
     directly without re-running __init__, so the restored instance simply
@@ -59,7 +57,7 @@ def patch_stale_predictor(predictor):
     require_version_match=False only silences AutoGluon's own compatibility
     *warning*, it doesn't backfill missing attributes. Each sub-patch below
     was added reactively as a specific AttributeError surfaced when calling
-    predict_proba()/evaluate() on CICIDS2017's original (1.1.1) predictor
+    predict_proba()/evaluate() on a predictor saved by AutoGluon 1.1.1
     under the cluster's AutoGluon 1.6.2 - there may be more; add them here
     as they turn up rather than patching individual call sites. Call this
     right after TabularPredictor.load() and before any predict_proba()/

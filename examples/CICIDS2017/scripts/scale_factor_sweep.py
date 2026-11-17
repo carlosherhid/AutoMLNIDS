@@ -1,7 +1,9 @@
 """
 Sweep the near-zero feature rescaling factor. This does not derive the factor
 mathematically, but turns "we picked 1e6" into an ablation that shows how accuracy
-depends on it (a plateau between 1e4 and 1e7).
+depends on it. Only the factor varies, not the threshold (1e-6): a factor above 1e6 pushes
+the rescaled values above 1, which changes the input quantization scale of every feature, and
+the rescaling is not monotonic (a value below the threshold can end up above one that was larger).
 
 Runs scripts/autogluon_to_pytorch_qat.py once per factor as a subprocess (keeps this
 script simple and reuses the exact same code path/logging as every other

@@ -13,7 +13,7 @@
 #   <tag>-exp1 ... <tag>-exp8  Experiments 1-5 of the paper and the three alternative input representations (6-8), each over
 #                              the seeds, seed i trained and tested on split_i (run_multiseed.py --experiment N)
 #   <tag>-base-s<i>            Random Forest, Logistic Regression and XGBoost on split_i
-#   <tag>-analyses             PTQ, functional equivalence, noise, input resolution, size and latency, quantized engines
+#   <tag>-analyses             PTQ, AutoGluon/replica agreement, noise, input resolution, size and latency, quantized engines
 #   <tag>-sweep                Experiment 4 for a range of rescaling factors
 #
 # Options:

@@ -21,7 +21,8 @@ The firmware receives the **raw Min-Max** rows (`data/test_device.csv`) and appl
 ## Steps (run from `m5stack_ids_eval/`)
 
 1. `python device_bench/make_bench_samples.py` and `python device_bench/reference_predictions.py`
-   (the second one must print 99.53 / 99.75 / 0.70 for FP32 and 99.26 / 99.23 / 0.71 for INT8).
+   (with the checkpoint included in this folder, the second one must print 99.53 / 99.75 / 0.70 for FP32 and 99.26 / 99.23 / 0.71 for INT8; with
+   another checkpoint the reference values are those it prints, see the note of `INT8_DEPLOYMENT.md`).
 2. Open `device_bench/arduino_m5_ids_int8_bench/arduino_m5_ids_int8_bench.ino` in the Arduino IDE (same board settings
    as before), upload, and note the "program storage" and "global variables" lines of the compilation (they include
    24 KB of `bench_samples.h`; the footprint of Table 10 comes from the sketches without it).
@@ -44,7 +45,8 @@ The firmware receives the **raw Min-Max** rows (`data/test_device.csv`) and appl
 
 ## Optional extensions
 
-* **Five seeds:** export the 5 `qat_pytorch_model_exp1006XX.pth` / `normal_pytorch_model_exp1006XX.pth` checkpoints of the cluster
+* **Five seeds:** export the 5 `qat_pytorch_model_exp1004XX.pth` / `normal_pytorch_model_exp1004XX.pth` checkpoints (Experiment 4, whose
+  near-zero rescaling is the one the firmware applies; Experiment 6 is the standardization) of the cluster
   with `export_qat_int8.py` and `export_mlp_to_header.py`, rebuild the headers and repeat step 4 with `--limit 20000`.
 * **Energy:** needs an inline USB power meter with logging (or an INA219). Run the `BENCH` stream for 60 s at the maximum rate
   for FP32 and INT8, and an idle baseline with the display off; energy per inference = (P_active - P_idle) / throughput.

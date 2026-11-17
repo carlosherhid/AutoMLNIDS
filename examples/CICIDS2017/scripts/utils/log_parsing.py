@@ -1,9 +1,8 @@
 """
 Shared regex-based parser for compressed_models/execution_log_exp*.txt, produced by
-Logger in autogluon_to_pytorch_qat.py. Mirrors the parsing logic in
-parse_execution_logs.ipynb (kept in sync manually - it's a notebook, not a module)
-so scripts/scale_factor_sweep.py, scripts/run_multiseed.py and
-scripts/build_tradeoff_table.py don't each reimplement it.
+Logger in autogluon_to_pytorch_qat.py. Shared by scripts/scale_factor_sweep.py,
+scripts/run_multiseed.py and scripts/build_tradeoff_table.py so that they don't each
+reimplement it.
 """
 import re
 
