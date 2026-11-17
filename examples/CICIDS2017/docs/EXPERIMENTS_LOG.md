@@ -1,7 +1,7 @@
 # Experiment log
 
-Commands behind the results of the paper, the same for every dataset (`CICIDS2017_improved`, `UNSW_NB15`, `TON_IoT`,
-`CICIoT2023`): data splits, AutoML search, feature selection, the experiments of Table 1 and their repetitions, and the
+Commands behind the results of the paper, the same for every dataset (`CICIDS2017_improved`, `UNSW_NB15`, `TON_IoT`; the
+commands also apply to `CICIoT2023`): data splits, AutoML search, feature selection, the experiments of Table 1 and their repetitions, and the
 analyses. On a SLURM cluster the whole sequence after the AutoML search is submitted by
 [`cluster/submit_experiments.sh`](../../../cluster/submit_experiments.sh) (see [`../../../cluster/README.md`](../../../cluster/README.md));
 this file lists what it runs.
@@ -50,6 +50,11 @@ Writes `<data>/balanced_binary/split_<seed>/{train,validation,test,finetune}.csv
 `split_info.json` with the sizes, the dropped columns and the deduplication counts). Exact duplicates, and feature vectors
 that appear with both labels, are removed before splitting; each seed draws its own balanced sample and its own split, and the
 Min-Max scaling is fitted on the training part only.
+
+The raw files are read in alphabetical order, and `split_info.json` records that order under `files_in_reading_order`. The order decides the
+row order and, with it, the splits that a seed produces, so a dataset made of several files gives different splits if they are read in another
+order. `--file-order "<file1.csv>,<file2.csv>"` reads them in an explicit order: giving the `files_in_reading_order` of an earlier run reproduces its
+splits exactly (for instance `--file-order "UNSW_NB15_training-set.csv,UNSW_NB15_testing-set.csv"` reproduces the UNSW-NB15 splits of the cluster runs).
 
 Two options change how the data is cleaned and are used for sensitivity analyses:
 

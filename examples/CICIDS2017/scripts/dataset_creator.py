@@ -76,11 +76,12 @@ def is_benign(labels, benign):
 
 
 def find_csv_files(directory):
+    """The CSV files under `directory`, in alphabetical order. os.walk lists them in the order of the file system, which differs from one machine
+    to another; the files are concatenated in this order, so the same seed would give different splits on two machines (see --file-order)."""
     csv_files = []
     for root, dirs, files in os.walk(directory):
-        for file in files:
-            if file.endswith('.csv'):
-                csv_files.append(os.path.join(root, file))
+        dirs.sort()
+        csv_files.extend(os.path.join(root, file) for file in sorted(files) if file.endswith('.csv'))
     return csv_files
 
 def derive_label_from_filename(file):
@@ -141,7 +142,7 @@ def create(
         composition: str, problem_type: str, cpus: int, keep_attack_type: bool = False,
         max_rows_per_file: int = None, seeds: str = '0', dedup: bool = True, conflict_policy: str = 'drop',
         onehot: str = '', onehot_max_levels: int = 20, exclude_attack: str = '', official_split: bool = False,
-        drop_columns: str = ''):
+        drop_columns: str = '', file_order: str = ''):
     """Cleans the raw files once and then writes one train/validation/test/finetune split per seed to
     <directory>/../<composition>_<problem_type>/split_<seed>/. Everything that learns from the data (the Min-Max scaling) is fitted on the
     training part of each split only; exact duplicates are removed before splitting, so that no test row has an identical copy in the
@@ -178,6 +179,15 @@ def create(
     if not files:
         logger.error(f'No CSV files found in directory: {directory}')
         raise FileNotFoundError(f'No CSV files found in directory: {directory}')
+
+    if file_order:
+        # the order of the files decides the row order, and with it the splits of a seed: this reproduces the order of a previous run
+        # (split_info.json records it under "files_in_reading_order")
+        wanted = [name.strip() for name in file_order.split(',') if name.strip()]
+        by_name = {os.path.basename(file): file for file in files}
+        if len(by_name) != len(files) or sorted(wanted) != sorted(by_name):
+            raise ValueError(f'--file-order must name every CSV file of the directory exactly once: found {sorted(by_name)}, given {wanted}')
+        files = [by_name[name] for name in wanted]
 
     logger.info(f'Found {len(files)} CSV files in directory: {directory}')
     logger.debug(f'CSV files: {files}')
@@ -439,6 +449,7 @@ def create(
                 pbar.update()
 
         info = {'seed': split_seed, 'directory': os.path.basename(os.path.abspath(directory)), 'composition': composition,
+                'files_in_reading_order': [os.path.basename(file) for file in files],
                 'sizes': {'test_size': test_size, 'finetune_size': finetune_size, 'validation_size': validation_size},
                 'splits': counts, 'features': feature_columns,
                 'dropped': {'excluded': excluded_columns, 'text_columns': text_columns, 'constant': constant_columns,
@@ -488,6 +499,10 @@ def create(
               help='also write {split}_attack_types.csv with the original (pre-binarization) '
                    'per-row attack label, ID-aligned with {split}.csv, for per-attack-class '
                    'evaluation. Does not change the schema of {split}.csv itself.')
+@click.option('--file-order', type=str, default='',
+              help='comma-separated names of the CSV files, in the order in which they are read. By default they are read in alphabetical order. '
+                   'The order decides the row order and therefore the splits of a seed: give the "files_in_reading_order" of the split_info.json '
+                   'of an earlier run to reproduce its splits exactly.')
 @click.option('--max-rows-per-file', type=int, default=None,
               help='randomly subsample each input CSV to at most this many rows while reading, '
                    'to bound peak memory for datasets released as one huge file per class '

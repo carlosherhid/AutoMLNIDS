@@ -6,11 +6,11 @@ Learning Models for Edge Network Intrusion Detection* (anonymized for review).
 The pipeline takes the neural network that AutoGluon selects for binary intrusion detection, rebuilds its topology in
 PyTorch, trains it there with Quantization-Aware Training (QAT) after a preprocessing step aimed at the near-zero feature
 values that collapse under INT8 quantization, and exports the result as an int8 model (integer matrix products with int32
-accumulation and one float32 requantization multiplier per layer) that runs on an M5Stack Basic (ESP32). It is run on four datasets with the same experiments (UNSW-NB15 with the BatchNorm-folded protocol of
-[`cluster/README.md`](cluster/README.md), because the BatchNorm-free replica of its AutoML network does not train): the corrected release of
+accumulation and one float32 requantization multiplier per layer) that runs on an M5Stack Basic (ESP32). It is run on three datasets with the same experiments: the corrected release of
 [CICIDS2017](https://www.unb.ca/cic/datasets/ids-2017.html) (`CICIDS2017_improved`),
-[UNSW-NB15](https://research.unsw.edu.au/projects/unsw-nb15-dataset), TON_IoT (network data) and
-[CICIoT2023](https://www.unb.ca/cic/datasets/iotdataset-2023.html).
+[UNSW-NB15](https://research.unsw.edu.au/projects/unsw-nb15-dataset) (with the BatchNorm-folded protocol of
+[`cluster/README.md`](cluster/README.md), because the BatchNorm-free replica of its AutoML network does not train) and TON_IoT (network data).
+The scripts also support [CICIoT2023](https://www.unb.ca/cic/datasets/iotdataset-2023.html) (`examples/CICIoT2023/`); no results for it are included.
 
 ## Pipeline
 
@@ -31,7 +31,7 @@ requirements.txt                          software stack of the paper (Python 3.
 cluster/                                  SLURM job scripts
 examples/CICIDS2017/scripts/              all pipeline and analysis scripts (see examples/CICIDS2017/README.md)
 examples/CICIDS2017/docs/EXPERIMENTS_LOG.md   commands of the experiments of the paper
-examples/CICIoT2023/                      how the second dataset is built (reuses the CICIDS2017 scripts)
+examples/CICIoT2023/                      how CICIoT2023 is built (reuses the CICIDS2017 scripts; no results included)
 examples/IoT_test/m5stack_ids_eval/       M5Stack deployment: INT8 export, firmware, device benchmark
 ```
 

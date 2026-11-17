@@ -1,6 +1,6 @@
 # CICIoT2023
 
-One of the four datasets of the paper, run with exactly the same experiments as the others. It reuses the scripts of [`../CICIDS2017/scripts/`](../CICIDS2017/scripts): every script
+A dataset supported by the same experiments as the others, with no results included yet. It reuses the scripts of [`../CICIDS2017/scripts/`](../CICIDS2017/scripts): every script
 takes its data and output directories as arguments, so nothing is duplicated.
 
 [`dataset_creator.py`](../CICIDS2017/scripts/dataset_creator.py) recognizes CICIoT2023 from the directory name
