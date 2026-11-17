@@ -54,7 +54,13 @@ Min-Max scaling is fitted on the training part only.
 The raw files are read in alphabetical order, and `split_info.json` records that order under `files_in_reading_order`. The order decides the
 row order and, with it, the splits that a seed produces, so a dataset made of several files gives different splits if they are read in another
 order. `--file-order "<file1.csv>,<file2.csv>"` reads them in an explicit order: giving the `files_in_reading_order` of an earlier run reproduces its
-splits exactly (for instance `--file-order "UNSW_NB15_training-set.csv,UNSW_NB15_testing-set.csv"` reproduces the UNSW-NB15 splits of the cluster runs).
+splits exactly. The orders of the runs reported here (the order in which the cluster listed the files of each dataset):
+
+| dataset | `--file-order` |
+|---|---|
+| `UNSW_NB15` | `UNSW_NB15_training-set.csv,UNSW_NB15_testing-set.csv` (reproduces the cluster's `split_0` exactly: checked) |
+| `CICIDS2017_improved` | `thursday.csv,wednesday.csv,tuesday.csv,monday.csv,friday.csv` (recorded from the cluster's directory listing; not checked outside the cluster) |
+| `TON_IoT` | a single file: the order does not matter |
 
 Two options change how the data is cleaned and are used for sensitivity analyses:
 
