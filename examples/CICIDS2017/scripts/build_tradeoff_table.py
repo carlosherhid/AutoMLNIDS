@@ -34,6 +34,11 @@ from utils.cpu_loading import allow_cpu_loading  # noqa: E402
 from autogluon_to_pytorch_qat import AutoReplicatedNN, QATWrapper, get_model_architecture  # noqa: E402
 
 
+# experiments whose PyTorch network is given the original Min-Max input, the one the AutoGluon model was trained on
+ORIGINAL_INPUT_EXPERIMENTS = tuple(n for n, (_, _, flags) in EXPERIMENTS.items()
+                                   if not {'--scale_close_to_zero', '--preprocess', '--prune_features'} & set(flags.split()))
+
+
 def paper_experiment(exp_number):
     """Label of the paper experiment a run belongs to ('' for runs that are not one of Exp. 1-5)."""
     base, _ = split_experiment_number(exp_number)
@@ -174,6 +179,17 @@ def main():
                         parsed[f'qat_{k.replace("latency_", f"latency{suffix}_", 1)}'] = v
 
         rows.append(parsed)
+
+    # AutoGluon is one model scored on one test set (the split of seed 0). Logs written before the evaluation was fixed printed, for the experiments that
+    # give the PyTorch network a transformed input (rescaling, feature pruning), its accuracy on that transformed test set: take the value of a run of the
+    # same seed whose input is the original one.
+    reference = {}
+    for row in rows:
+        if row.get('autogluon_accuracy') is not None and split_experiment_number(row['experiment_number'])[0] in ORIGINAL_INPUT_EXPERIMENTS:
+            reference.setdefault(row['seed'], row['autogluon_accuracy'])
+    for row in rows:
+        if row['seed'] in reference:
+            row['autogluon_accuracy'] = reference[row['seed']]
 
     df = pd.DataFrame(rows)
     out_path = args.output_csv or os.path.join(args.logs_dir, 'tradeoff_table.csv')

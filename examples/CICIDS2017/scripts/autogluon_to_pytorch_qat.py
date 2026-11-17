@@ -13,7 +13,7 @@ import time  # Import the time module to measure execution time
 from sklearn.preprocessing import LabelEncoder
 from autogluon.tabular import TabularPredictor
 from torch.utils.data import DataLoader, TensorDataset
-from torch.quantization import QuantStub, DeQuantStub, prepare_qat, convert
+from torch.quantization import QuantStub, DeQuantStub, prepare_qat, convert, disable_observer
 from tqdm import tqdm
 import torch.nn.utils.prune as prune
 
@@ -534,7 +534,9 @@ def main():
             qat_model.model = pruned_model  # Update the QAT wrapper's model
             # on a copy: the observers of a QAT model keep updating in eval mode, so scoring the test set with the model itself would
             # change the quantization parameters that convert() uses afterwards
-            pruned_accuracy = evaluate_model(copy.deepcopy(qat_model), test_loader, device)
+            pruned_copy = copy.deepcopy(qat_model)
+            pruned_copy.apply(disable_observer)
+            pruned_accuracy = evaluate_model(pruned_copy, test_loader, device)
             print(f'Accuracy of the pruned QAT model on the test dataset: {pruned_accuracy * 100:.2f}%')
 
         qat_model.eval()
@@ -543,6 +545,11 @@ def main():
         # and under the other engines of this PyTorch build. The INT8 kernels of some CPUs saturate (activations that use the full uint8 range of the
         # qnnpack configuration overflow the 16-bit intermediate sums of the x86/fbgemm AVX2 kernels), which turns a good model into ~50 % accuracy.
         fake_quantized_model = copy.deepcopy(qat_model)
+        # the observers of a QAT model keep updating in eval() mode: freeze those of this copy, so that scoring the test set (and converting it for the
+        # other engines below) uses the quantization parameters of the training and not ranges re-estimated on the test data. qat_model itself,
+        # converted right below for the accuracy that is reported, never sees the test set before convert().
+        fake_quantized_model.apply(disable_observer)
+        print('Observers frozen before the fake-quantized evaluation and the conversion for the other engines')
         fake_accuracy = evaluate_model(fake_quantized_model, test_loader, torch.device("cpu"))
         print(f'Accuracy of the QAT model before conversion (fake quantization) on the test dataset: {fake_accuracy * 100:.2f}%')
         qat_model = convert(qat_model)
@@ -573,13 +580,9 @@ def main():
         print('Skipping the evaluation of the original AutoGluon model (--skip_autogluon_eval).')
     else:
         try:
-            if args.modify_test or args.scale_close_to_zero or args.prune_features:
-                print("Evaluating AutoGluon model on the modified test dataset.")
-                ag_test_data = test_data.drop(columns=['Label'])
-                ag_labels = test_data['Label']
-                original_ag_model_accuracy = predictor.evaluate(pd.concat([ag_test_data, ag_labels], axis=1))['accuracy']
-            else:
-                original_ag_model_accuracy = predictor.evaluate(pd.read_csv(os.path.join(args.data_dir, 'test.csv')))['accuracy']
+            # the AutoGluon model was trained on the original Min-Max input: it is always scored on the original test.csv, whatever transformation
+            # the PyTorch network of this experiment uses (rescaling, alternative representation, feature pruning)
+            original_ag_model_accuracy = predictor.evaluate(pd.read_csv(os.path.join(args.data_dir, 'test.csv')))['accuracy']
             print(f'Accuracy on the test set (Original AutoGluon Model): {original_ag_model_accuracy:.4f}')
         except Exception as e:
             print(f'WARNING: skipping original-AutoGluon-model comparison, predictor.evaluate() failed: {e!r}')

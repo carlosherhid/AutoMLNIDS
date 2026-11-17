@@ -5,7 +5,8 @@ multi-seed runs (seed i is evaluated on split_i). Run it after Experiments 1-5 h
   ptq          static post-training quantization of the FP32 model of every seed (post_training_quantization.py), for the experiments of
                --ptq_experiments (default: Experiment 1). Each one is quantized with the input transformation it was trained with
                (rescaling of Experiment 4, standardization / log / quantile of Experiments 6-8), so PTQ and QAT are compared on the same data
-  equivalence  agreement between the AutoGluon model and the FP32 replica of Experiment 4, seed 0, on split_0
+  equivalence  prediction agreement between the AutoGluon model and the FP32 replica of --equivalence_experiment (default Experiment 3,
+               which has the same Min-Max input as the AutoGluon model), seed 0, on split_0
   noise        accuracy of the Experiment 4 FP32 and QAT models, seed 0, under Gaussian input noise (robustness_noise_eval.py)
   resolution   share of each feature's resolution that survives 8-bit input quantization, on split_0
   tradeoff     size and latency of the model of Experiments 1-5, seed 0, one thread (build_tradeoff_table.py)
@@ -30,7 +31,10 @@ from utils.quantization import DEFAULT_ENGINE  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STAGES = ('ptq', 'equivalence', 'noise', 'resolution', 'tradeoff', 'engines', 'sweep')
-EXPERIMENT_1, EXPERIMENT_4 = 1, 4     # numbers of utils/experiments.py
+EXPERIMENT_1, EXPERIMENT_3, EXPERIMENT_4 = 1, 3, 4     # numbers of utils/experiments.py
+# experiments whose FP32 replica can be compared with AutoGluon: no feature selection and no alternative representation (verify_functional_equivalence.py
+# only knows the rescaling)
+EQUIVALENCE_EXPERIMENTS = [n for n in EXPERIMENTS if n not in SELECTS_FEATURES and '--preprocess' not in EXPERIMENTS[n][2].split()]
 
 
 def input_flags(experiment):
@@ -69,6 +73,9 @@ def main():
                         choices=[n for n in EXPERIMENTS if n not in SELECTS_FEATURES],
                         help='experiments whose FP32 network the ptq stage quantizes (Experiment 5 selects features: not supported). Experiment 1 keeps its '
                              'log name ptq_seed<S>.txt; the others are written as ptq_exp<N>_seed<S>.txt')
+    parser.add_argument('--equivalence_experiment', type=int, default=EXPERIMENT_3, choices=EQUIVALENCE_EXPERIMENTS,
+                        help='experiment whose FP32 replica the equivalence stage compares with the AutoGluon model; the replica is fed the input it '
+                             'was trained with. The default, Experiment 3, uses the raw Min-Max input of the AutoGluon model (no rescaling to undo)')
     parser.add_argument('--paper_seed', type=int, default=0, help='seed of the single model shown in the paper (split_0 by default)')
     parser.add_argument('--engines', nargs='+', default=['x86', 'onednn', 'qnnpack'])
     parser.add_argument('--latency_engine', type=str, default=DEFAULT_ENGINE, help='quantized engine of the size/latency table (default: the engine of every other INT8 number)')
@@ -108,9 +115,11 @@ def main():
                                  '--normal_model_path', checkpoint('normal', experiment, seed)] + input_flags(experiment),
                           f'ptq_seed{seed}' if experiment == EXPERIMENT_1 else f'ptq_exp{experiment}_seed{seed}')
         elif name == 'equivalence':
+            experiment = args.equivalence_experiment
             stage(name, [python, script('verify_functional_equivalence.py'), '--predictor_path', predictor,
-                         '--data_dir', split(paper), '--normal_model_path', checkpoint('normal', EXPERIMENT_4, paper),
-                         '--output_csv', os.path.join(out, 'functional_equivalence.csv')])
+                         '--data_dir', split(paper), '--normal_model_path', checkpoint('normal', experiment, paper),
+                         '--output_csv', os.path.join(out, f'functional_equivalence_exp{experiment}.csv')] +
+                  [flag for flag in input_flags(experiment) if flag == '--scale_close_to_zero'], f'equivalence_exp{experiment}')
         elif name == 'noise':
             os.makedirs(os.path.join(out, 'noise'), exist_ok=True)
             stage(name, [python, script('robustness_noise_eval.py'), '--predictor_path', predictor,

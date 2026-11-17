@@ -8,9 +8,15 @@ Reports: prediction agreement rate, Pearson correlation of the predicted
 probability for the positive (malicious) class, and the max/mean absolute
 probability difference.
 
+The replica is a network of the same topology trained separately in PyTorch, so this measures how
+closely two independently trained models agree, not an exact equivalence. The AutoGluon model is
+always given the original input; the replica must be given the input it was trained on: nothing for
+Experiments 1-3 (Min-Max, like AutoGluon), --scale_close_to_zero for Experiment 4. After the
+run, the replica accuracy printed below must equal the accuracy of the log of its experiment.
+
 Usage:
     python scripts/verify_functional_equivalence.py --predictor_path <predictor_dir> \
-        --data_dir <data_dir> --normal_model_path <normal_checkpoint>
+        --data_dir <data_dir> --normal_model_path <normal_checkpoint> [--scale_close_to_zero]
 """
 import argparse
 import os
@@ -35,6 +41,9 @@ def main():
     parser.add_argument('--data_dir', type=str, required=True)
     parser.add_argument('--normal_model_path', type=str, required=True,
                          help='Path to a *_normal_pytorch_model state_dict (FP32, not QAT)')
+    parser.add_argument('--scale_close_to_zero', action='store_true',
+                         help='give the replica the near-zero rescaling it was trained with (checkpoint of Experiment 4); AutoGluon is never given it')
+    parser.add_argument('--scale_factor', type=float, default=1e6)
     parser.add_argument('--split', type=str, default='test', choices=['test', 'validation', 'finetune'])
     parser.add_argument('--output_csv', type=str, default=None,
                          help='Optional path to save per-sample comparison rows')
@@ -68,8 +77,14 @@ def main():
     torch_model.load_state_dict(torch.load(args.normal_model_path, map_location='cpu'))
     torch_model.eval()
 
+    replica_input = X.values
+    if args.scale_close_to_zero:
+        # same rule as load_data() in autogluon_to_pytorch_qat.py
+        replica_input = np.where(np.abs(replica_input) < 1e-6, replica_input * args.scale_factor, replica_input)
+    print('Replica input: ' + (f'near-zero rescaling x{args.scale_factor:g}' if args.scale_close_to_zero else 'original Min-Max (as AutoGluon)'))
+
     with torch.no_grad():
-        logits = torch_model(torch.tensor(X.values, dtype=torch.float32))
+        logits = torch_model(torch.tensor(replica_input, dtype=torch.float32))
         torch_proba = torch.softmax(logits, dim=1).numpy()
     torch_pred = torch_proba.argmax(axis=1)
     torch_positive_proba = torch_proba[:, positive_class_idx]
