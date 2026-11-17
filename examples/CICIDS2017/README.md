@@ -29,12 +29,13 @@ The commands of the experiments of the paper are in [`docs/EXPERIMENTS_LOG.md`](
 |---|---|
 | `run_multiseed.py` | one numbered experiment (`--experiment N`) repeated over several seeds, mean +/- std |
 | `run_analyses.py` | runs the analyses below for one dataset with the arguments that tie them to the multi-seed runs |
-| `evaluate_checkpoint_metrics.py`, `build_metrics_table.py` | precision, recall, FPR and F1 of the saved checkpoints (also under other quantized engines), and the detection-metric tables |
+| `evaluate_checkpoint_metrics.py` | precision, recall, FPR and F1 of the saved checkpoints under other quantized engines |
+| `build_metrics_table.py` | detection-metric tables (recall, FPR, F1 of the FP32 and INT8 models per experiment, projected precision, classical baselines) for any number of datasets, from the per-seed CSV of each experiment |
 | `verify_functional_equivalence.py` | agreement between the AutoGluon model and the PyTorch replica |
 | `build_tradeoff_table.py` | accuracy / F1 / size / latency / sparsity table |
 | `baselines_classical_ml.py` | Random Forest, Logistic Regression and XGBoost baselines |
 | `post_training_quantization.py` | static post-training quantization baseline |
-| `build_preprocessing_table.py`, `input_resolution_diagnostic.py` | near-zero rescaling against other input preprocessings |
+| `build_preprocessing_table.py`, `input_resolution_diagnostic.py` | near-zero rescaling against other input preprocessings (table with seed-paired tests, Holm correction and confidence intervals; resolution that survives 8-bit input quantization) |
 | `scale_factor_sweep.py` | accuracy as a function of the rescaling factor |
 | `robustness_noise_eval.py` | accuracy under Gaussian input noise, FP32 vs. QAT |
 

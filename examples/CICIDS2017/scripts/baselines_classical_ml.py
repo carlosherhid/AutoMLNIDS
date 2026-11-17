@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
 from sklearn.preprocessing import LabelEncoder
 
 try:
@@ -43,12 +43,16 @@ def evaluate(name, model, X_test, y_test, fit_time, model_path):
     y_pred = model.predict(X_test)
     inference_time = time.time() - start
 
+    # positive class = 1 = malicious (the label encoding is alphabetical, as in autogluon_to_pytorch_qat.py)
+    tn, fp, fn, tp = confusion_matrix(y_test, y_pred, labels=[0, 1]).ravel()
     return {
         'model': name,
         'accuracy': accuracy_score(y_test, y_pred),
         'precision': precision_score(y_test, y_pred, zero_division=0),
         'recall': recall_score(y_test, y_pred, zero_division=0),
         'f1': f1_score(y_test, y_pred, zero_division=0),
+        'fpr': fp / (fp + tn) if fp + tn else float('nan'),
+        'tn': int(tn), 'fp': int(fp), 'fn': int(fn), 'tp': int(tp),
         'fit_time_s': fit_time,
         'mean_inference_time_ms_per_sample': (inference_time / len(X_test)) * 1000,
         'model_size_kb': os.path.getsize(model_path) / 1e3,

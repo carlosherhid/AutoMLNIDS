@@ -120,7 +120,21 @@ python scripts/run_analyses.py --data_root <data>/balanced_binary --stages sweep
 
 ## 6. Tables
 
-The tables of the paper are built from the files above: the accuracy and the detection metrics of every experiment from
-`multiseed_exp<N>_results.csv` (`build_preprocessing_table.py` for Experiments 3, 4, 6, 7 and 8), the trade-off table from
-`analyses/tradeoff_table_*.csv`, and the on-device evaluation from the seed-0 checkpoints of Experiment 4
-(`examples/IoT_test/m5stack_ids_eval/`).
+The tables of the paper are built from the files above. Both table scripts take the datasets as `NAME=ROOT[,MODELS_DIR]`
+(`ROOT` = `<data>/<dataset>/balanced_binary`; `MODELS_DIR` = `compressed_models`, or `compressed_models_bnfold` for the BatchNorm-folded runs):
+
+```bash
+python scripts/build_metrics_table.py --dataset CICIDS2017_improved=<data>/CICIDS2017_improved/balanced_binary \
+    UNSW_NB15=<data>/UNSW_NB15/balanced_binary,compressed_models_bnfold TON_IoT=<data>/TON_IoT/balanced_binary --output_dir <tables>
+python scripts/build_preprocessing_table.py --dataset <the same datasets> --output_dir <tables>
+```
+
+* `build_metrics_table.py`: recall, FPR and F1 of the FP32 and INT8 models of every experiment (mean +/- std over the seeds), the precision they imply
+  at other attack prevalences, and the classical baselines, from `multiseed_exp<N>_results.csv` and `baselines/split_<seed>/`. The FPR of a baseline
+  whose CSV has no confusion counts is derived with the real share of malicious flows of its test set (`split_info.json`).
+* `build_preprocessing_table.py` (Experiments 3, 4, 6, 7 and 8): the same metrics per input representation, the number of seeds whose INT8 model
+  loses more than 2 points, and the paired comparisons of Experiment 4 with each alternative (seed by seed, since seed *i* is trained and tested on
+  `split_<i>`): mean difference with its 95 % interval, median, seeds ahead, paired t-test, exact Wilcoxon test and Holm-adjusted p.
+* The trade-off table comes from `analyses/tradeoff_table_*.csv` (its AutoGluon accuracy is that of a run with the original input), the AutoGluon/replica
+  agreement from `analyses/functional_equivalence_exp<N>.csv`, and the on-device evaluation from the seed-0 checkpoints of Experiment 4
+  (`examples/IoT_test/m5stack_ids_eval/`).
